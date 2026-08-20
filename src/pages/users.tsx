@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Users as UsersIcon, Power, Download, Plus, Loader2 } from 'lucide-react';
 import { useSession } from '@/features/auth/session-context';
 import {
-  useUsersPage,
+  useAllUsers,
   useUserStats,
   useCreateUser,
   useUpdateUserStatus,
@@ -80,23 +80,38 @@ export function UsersPage() {
     setPage(1);
   }
 
-  const params = useMemo(() => {
-    const p: { page: number; limit: number; search?: string; role?: string } = { page, limit: PAGE_SIZE };
-    if (debouncedSearch.trim()) p.search = debouncedSearch.trim();
-    if (roleFilter) p.role = roleFilter;
-    return p;
-  }, [page, debouncedSearch, roleFilter]);
-
-  const { data: usersPage, isLoading, error } = useUsersPage(params);
+  // The backend's list endpoint doesn't support server-side pagination,
+  // search, or role filtering at all — it ignores those params and always
+  // returns the full array. The previous version of this page sent them
+  // anyway and read the response as {items, total, pages}, which doesn't
+  // exist on a plain array — every field came back undefined, so the
+  // table always rendered empty regardless of how many users existed.
+  // Fixed by fetching the real full list (useAllUsers, already correctly
+  // handles this endpoint's actual shape) and filtering/paginating here.
+  const { data: allUsers = [], isLoading, error } = useAllUsers();
   const { data: stats = { total: 0, active: 0, inactive: 0 } } = useUserStats();
   const { data: sites = [] } = useSites();
   const { data: departments = [] } = useDepartments();
   const { data: designationsData } = useDesignations();
   const designations = designationsData?.designations || [];
 
-  const users = usersPage?.items || [];
-  const total = usersPage?.total || 0;
-  const pages = usersPage?.pages || 1;
+  const filteredUsers = useMemo(() => {
+    let list = allUsers;
+    if (roleFilter) {
+      list = list.filter((u) => (u.roles && u.roles.length ? u.roles : [u.role]).includes(roleFilter));
+    }
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((u) =>
+        [u.fullName, u.username, u.email, u.department].some((f) => (f || '').toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  }, [allUsers, roleFilter, debouncedSearch]);
+
+  const total = filteredUsers.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const users = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeSites = useMemo(() => sites.filter((s) => s.isActive !== false), [sites]);
   function userSiteCode(u: UserDirectoryEntry) {
