@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useUpdateUserRoles } from '@/features/users/hooks';
+import { useAssignableRoles } from '@/features/privileges/hooks';
 import type { UserDirectoryEntry } from '@/types/api';
 
-const ROLES = ['Author', 'Reviewer', 'Approver', 'IT Admin', 'Administrator'];
 const ELEVATED = ['IT Admin', 'Administrator'];
 
 interface MultiRoleDialogProps {
@@ -23,6 +23,7 @@ interface MultiRoleDialogProps {
 // Granting IT Admin/Administrator requires the Administrator role (enforced
 // server-side too). Confirmed with the admin's own password (e-signature).
 export function MultiRoleDialog({ target, actorRole, onClose, onSaved }: MultiRoleDialogProps) {
+  const { roles: ROLES } = useAssignableRoles();
   const initial = target.roles && target.roles.length ? target.roles : [target.role];
   const [selected, setSelected] = useState<string[]>(initial);
   const [activeRole, setActiveRole] = useState(target.role);
