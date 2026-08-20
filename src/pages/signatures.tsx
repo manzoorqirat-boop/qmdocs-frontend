@@ -186,7 +186,7 @@ export function SignaturesPage() {
         </div>
         <button
           onClick={() => setEnvStatus('')}
-          className={cn('rounded-lg border bg-paper-raised p-3.5 text-left shadow-card', envStatus === '' ? 'border-ink-soft ring-1 ring-ink-soft' : 'border-line')}
+          className={cn('col-span-2 rounded-lg border bg-paper-raised p-3.5 text-left shadow-card sm:col-span-1', envStatus === '' ? 'border-ink-soft ring-1 ring-ink-soft' : 'border-line')}
         >
           <div className="text-[11px] font-semibold tracking-wide text-slate uppercase">Total</div>
           <div className="mt-1 text-2xl font-semibold text-ink">{counts?.total ?? 0}</div>
