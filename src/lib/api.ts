@@ -314,8 +314,32 @@ export const api = {
 
   // ── Role privileges ────────────────────────────────────
   getRolePrivileges: () => request<import('@/types/api').PrivilegeSet[]>('GET', '/api/role-privileges'),
-  saveRolePrivileges: (payload: import('@/types/api').PrivilegeSet[]) =>
-    request<{ message?: string }>('POST', '/api/role-privileges', payload),
+  // One role per call — the backend's SavePrivilegesRequest is {Role, Sections,
+  // Privileges, AdminPassword} for a single existing role, not an array. Also
+  // requires AdminPassword (Administrator-only, e-signature-style confirmation).
+  saveRolePrivileges: (body: { role: string; sections?: string[]; privileges?: Record<string, boolean>; adminPassword: string }) =>
+    request<import('@/types/api').PrivilegeSet>('POST', '/api/role-privileges', {
+      role: body.role,
+      sections: body.sections,
+      privileges: body.privileges,
+      adminPassword: body.adminPassword,
+    }),
+  createRolePrivilege: (body: {
+    role: string;
+    description?: string;
+    color?: string;
+    sections?: string[];
+    privileges?: Record<string, boolean>;
+    adminPassword: string;
+  }) =>
+    request<import('@/types/api').PrivilegeSet>('POST', '/api/role-privileges/create', {
+      role: body.role,
+      description: body.description,
+      color: body.color,
+      sections: body.sections,
+      privileges: body.privileges,
+      adminPassword: body.adminPassword,
+    }),
 
   // ── Entra/SSO: intentionally absent — see MIGRATION_STATUS.md and the
   // backend cleanup (EntraAuthEndpoints.cs was removed as unused Azure code).
