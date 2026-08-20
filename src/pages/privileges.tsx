@@ -1,9 +1,13 @@
-import { useState, useMemo } from 'react';
-import { Check } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Plus } from 'lucide-react';
 import { useSession } from '@/features/auth/session-context';
-import { useRolePrivileges, useSaveRolePrivileges } from '@/features/privileges/hooks';
+import { useRolePrivileges, useSaveRolePrivileges, useCreateRolePrivilege, sortRoles } from '@/features/privileges/hooks';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { PasswordConfirmDialog, type PasswordConfirmAction } from '@/components/password-confirm-dialog';
 import { cn } from '@/lib/utils';
 import type { PrivilegeSet } from '@/types/api';
 
@@ -33,11 +37,6 @@ const PRIV_GROUPS: { title: string; keys: [keyof PrivilegeSet, string, Level][] 
     keys: [
       ['canViewUsers', 'View Users', 'nav'],
       ['canManageUsers', 'Manage Users', 'fixed'],
-      // This key is `canManageItAdmins` (lowercase "t"), matching the
-      // backend's `CanManageItAdmins` C# property exactly. The legacy
-      // frontend used `canManageITAdmins` — that key never matched what
-      // the API actually returns, so that toggle always displayed OFF
-      // regardless of the real stored value. Fixed here.
       ['canManageItAdmins', 'Manage IT Admins', 'fixed'],
       ['canManageDepartments', 'Manage Departments', 'fixed'],
       ['canViewSettings', 'View Settings', 'fixed'],
@@ -46,6 +45,26 @@ const PRIV_GROUPS: { title: string; keys: [keyof PrivilegeSet, string, Level][] 
     ],
   },
 ];
+// Flattened list of every editable privilege key, in the same order shown
+// in the matrix — used to build the save payload.
+const ALL_PRIV_KEYS = PRIV_GROUPS.flatMap((g) => g.keys.map(([k]) => k));
+
+// The backend's Apply() switches on nameof(RolePrivilege.CanX) — the exact
+// C# property name, PascalCase. Dictionary keys aren't run through ASP.NET's
+// camelCase policy the way property names are (that only applies to an
+// object's own properties), so this has to be built by hand, not assumed.
+// Verified: every one of these 16 keys differs from its backend property
+// name ONLY in the first letter (e.g. canManageItAdmins -> CanManageItAdmins,
+// lowercase "t" preserved) — a capitalize-first-letter transform is exact
+// for all of them, so no per-key lookup table is needed.
+function toBackendKey(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+function buildPrivilegesPayload(row: PrivilegeSet): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const key of ALL_PRIV_KEYS) out[toBackendKey(key)] = !!row[key];
+  return out;
+}
 
 const ENFORCEMENT_BADGE: Record<Level, { text: string; title: string; className: string }> = {
   live: { text: 'Live', title: 'Enforced by the server on every action — changes apply immediately.', className: 'bg-success-soft text-success' },
@@ -61,27 +80,23 @@ const ENFORCEMENT_BADGE: Record<Level, { text: string; title: string; className:
   },
 };
 
-const ROLE_ORDER = ['Author', 'Reviewer', 'Approver', 'IT Admin', 'Administrator'];
-
 export function PrivilegesPage() {
   const { user } = useSession();
   const isAdministrator = user?.role === 'Administrator';
   const { data, isLoading, error } = useRolePrivileges();
   const saveMutation = useSaveRolePrivileges();
+  const createMutation = useCreateRolePrivilege();
 
-  const initialRows = useMemo(() => {
-    const list = (data || []).filter((r) => ROLE_ORDER.includes(r.role));
-    return [...list].sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
-  }, [data]);
+  const sortedRoles = sortRoles(data || []);
 
   const [rows, setRows] = useState<PrivilegeSet[]>([]);
-  const [prevInitialRows, setPrevInitialRows] = useState(initialRows);
-  if (initialRows !== prevInitialRows) {
-    setPrevInitialRows(initialRows);
-    setRows(initialRows);
+  const [prevData, setPrevData] = useState(data);
+  if (data !== prevData) {
+    setPrevData(data);
+    setRows(sortedRoles);
   }
 
-  const [dirty, setDirty] = useState(false);
+  const [dirtyRoles, setDirtyRoles] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState('');
 
   function toggle(roleIdx: number, key: keyof PrivilegeSet) {
@@ -89,19 +104,78 @@ export function PrivilegesPage() {
     const row = rows[roleIdx];
     if (!row || row.role === 'Administrator') return;
     setRows((prev) => prev.map((r, i) => (i === roleIdx ? { ...r, [key]: !r[key] } : r)));
-    setDirty(true);
+    setDirtyRoles((prev) => new Set(prev).add(row.role));
     setMsg('');
   }
 
-  async function save() {
+  // ── Save (password-confirmed — the backend requires it) ────────────────
+  const [pwAction, setPwAction] = useState<PasswordConfirmAction | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState('');
+
+  function openSave() {
+    if (dirtyRoles.size === 0) return;
     setMsg('');
+    setPwAction({
+      title: 'Confirm Privilege Changes',
+      message: `Save changes to: ${[...dirtyRoles].join(', ')}. Re-enter your password as an electronic signature — recorded in the change history.`,
+      confirmLabel: 'Save & Sign',
+      run: async (password) => {
+        await Promise.all(
+          [...dirtyRoles].map((role) => {
+            const row = rows.find((r) => r.role === role);
+            if (!row) return Promise.resolve();
+            return saveMutation.mutateAsync({ role, privileges: buildPrivilegesPayload(row), adminPassword: password });
+          }),
+        );
+        setDirtyRoles(new Set());
+        setMsg('Privilege matrix saved. Changes are recorded in change history.');
+      },
+    });
+  }
+
+  // ── Create role ──────────────────────────────────────────────────────
+  const [showCreate, setShowCreate] = useState(false);
+  const [newRole, setNewRole] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [createPwd, setCreatePwd] = useState('');
+  const [createErr, setCreateErr] = useState('');
+
+  function openCreateDialog() {
+    setNewRole('');
+    setNewDesc('');
+    setCreatePwd('');
+    setCreateErr('');
+    setShowCreate(true);
+  }
+  async function submitCreate() {
+    const name = newRole.trim();
+    if (!name) return setCreateErr('Role name is required');
+    if (sortedRoles.some((r) => r.role.toLowerCase() === name.toLowerCase())) {
+      return setCreateErr(`A role named "${name}" already exists`);
+    }
+    if (!createPwd) return setCreateErr('Your password is required');
+    setCreateErr('');
     try {
-      const payload = rows.filter((r) => r.role !== 'Administrator');
-      await saveMutation.mutateAsync(payload);
-      setMsg('Privilege matrix saved. Changes are recorded in change history.');
-      setDirty(false);
-    } catch {
-      /* error surfaced via saveMutation.error below */
+      await createMutation.mutateAsync({ role: name, description: newDesc.trim(), adminPassword: createPwd });
+      setShowCreate(false);
+      setMsg(`Role "${name}" created. Set its privileges below, then Save.`);
+    } catch (e) {
+      setCreateErr(e instanceof Error ? e.message : 'Could not create role.');
+    }
+  }
+
+  async function runPwAction(password: string) {
+    if (!pwAction) return;
+    setPwBusy(true);
+    setPwError('');
+    try {
+      await pwAction.run(password);
+      setPwAction(null);
+    } catch (e) {
+      setPwError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setPwBusy(false);
     }
   }
 
@@ -115,12 +189,19 @@ export function PrivilegesPage() {
         <CardHeader className="flex-row items-center justify-between">
           <div>
             <CardTitle>Role Privilege Matrix</CardTitle>
-            <CardDescription>{isAdministrator ? 'Toggle privileges per role. The Administrator role is fixed.' : 'Read-only — only an Administrator can edit privileges.'}</CardDescription>
+            <CardDescription>
+              {isAdministrator ? 'Toggle privileges per role, or add a new role. The Administrator role is fixed.' : 'Read-only — only an Administrator can edit privileges.'}
+            </CardDescription>
           </div>
           {isAdministrator && (
-            <Button size="sm" onClick={save} disabled={!dirty || saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving…' : 'Save Changes'}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={openCreateDialog}>
+                <Plus size={14} /> Add Role
+              </Button>
+              <Button size="sm" onClick={openSave} disabled={dirtyRoles.size === 0 || saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </div>
           )}
         </CardHeader>
 
@@ -140,6 +221,8 @@ export function PrivilegesPage() {
                   <th key={r.role} className="min-w-[90px] pb-2 text-center text-[13px] font-semibold text-ink">
                     {r.role}
                     {r.role === 'Administrator' && <div className="text-[9px] font-normal text-slate">locked</div>}
+                    {!r.isSystemRole && <div className="text-[9px] font-normal text-seal">custom</div>}
+                    {dirtyRoles.has(r.role) && <div className="text-[9px] font-normal text-warning">unsaved</div>}
                   </th>
                 ))}
               </tr>
@@ -196,6 +279,54 @@ export function PrivilegesPage() {
           with the editor's name and a timestamp.
         </div>
       </Card>
+
+      <Dialog open={showCreate} onOpenChange={(open) => !open && !createMutation.isPending && setShowCreate(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a new role</DialogTitle>
+          </DialogHeader>
+          <p className="text-[12.5px] leading-relaxed text-slate">
+            Creates the role with every privilege off. It appears as a new column in the matrix below — set its
+            privileges there, then Save.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label>Role name *</Label>
+            <Input value={newRole} onChange={(e) => setNewRole(e.target.value)} placeholder="e.g. Compliance Officer" maxLength={60} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              Description <span className="font-normal text-slate">(optional)</span>
+            </Label>
+            <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Shown alongside the role elsewhere in the app" maxLength={200} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Your password *</Label>
+            <Input type="password" value={createPwd} onChange={(e) => setCreatePwd(e.target.value)} autoComplete="off" />
+          </div>
+          {createErr && <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger">{createErr}</div>}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowCreate(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={submitCreate} disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating…' : 'Create role'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PasswordConfirmDialog
+        action={pwAction}
+        busy={pwBusy}
+        error={pwError}
+        onConfirm={runPwAction}
+        onClose={() => {
+          if (!pwBusy) {
+            setPwAction(null);
+            setPwError('');
+          }
+        }}
+      />
     </div>
   );
 }
