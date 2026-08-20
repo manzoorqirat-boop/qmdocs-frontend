@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { UsersPage } from '@/types/api';
 
 // The wizard, delegate modal, and view modal need the FULL user directory
 // (for the recipient picker), not a page of it — calling getUsers() with no
@@ -18,30 +17,23 @@ export function useAllUsers() {
 
 export const usersKeys = {
   all: ['users'] as const,
-  list: (params: Record<string, unknown>) => ['users', 'list', params] as const,
   stats: ['users', 'stats'] as const,
 };
 
-export function useUsersPage(params: { page: number; limit: number; search?: string; role?: string }) {
-  return useQuery({
-    queryKey: usersKeys.list(params),
-    queryFn: () => api.getUsers(params) as Promise<UsersPage>,
-    placeholderData: (prev) => prev,
-  });
-}
-
-// Global Total/Active/Inactive counts via cheap count-only calls (limit: 1),
-// independent of the current page/filters — same trick the legacy page used.
+// Global Total/Active/Inactive counts, computed from the full user list.
+// Previously issued three separate calls with page/limit/status params and
+// read `.total` off each response — the backend ignores all of those
+// params and always returns the full flat array regardless, so each call
+// silently fetched everyone anyway, and `.total` was always undefined on
+// that array. All three stats were always 0. One fetch, counted here.
 export function useUserStats() {
   return useQuery({
     queryKey: usersKeys.stats,
     queryFn: async () => {
-      const [all, active, inactive] = await Promise.all([
-        api.getUsers({ page: 1, limit: 1 }) as Promise<UsersPage>,
-        api.getUsers({ page: 1, limit: 1, status: 'Active' }) as Promise<UsersPage>,
-        api.getUsers({ page: 1, limit: 1, status: 'Inactive' }) as Promise<UsersPage>,
-      ]);
-      return { total: all.total || 0, active: active.total || 0, inactive: inactive.total || 0 };
+      const data = await api.getUsers();
+      const all = Array.isArray(data) ? data : data.items || [];
+      const active = all.filter((u) => u.status === 'Active').length;
+      return { total: all.length, active, inactive: all.length - active };
     },
   });
 }
