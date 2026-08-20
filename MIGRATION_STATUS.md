@@ -458,3 +458,43 @@ one-time impure reads, rather than suppressing or ignoring the warning.
 
 Verified with `tsc -b` (0 errors), `oxlint` (0 errors, 22 baseline
 warnings unchanged), and `npm run build` (succeeds).
+
+---
+
+# Railway/GitHub deployment readiness (caught before first deploy)
+
+The project had no way to actually run in production. `npm run build`
+worked fine, but there was no `start` script and no production server —
+Railway's Nixpacks auto-detect runs `npm run build` then `npm start`, and
+`vite preview` (the only thing that would otherwise be available) isn't
+built for production traffic (Vite's own docs say so explicitly). Fixed:
+
+- **`server.js`** (new) — small dependency-free Node static server: SPA
+  fallback to `index.html` for any non-asset path (needed for both the
+  `/app/*` client routes and the standalone `/external/sign/:token`
+  route), the same security headers the legacy app's server used, correct
+  cache headers (`immutable` on hashed assets, `no-cache` on
+  `index.html`), reads `PORT` from the environment. **Actually run and
+  curl-tested** against the real build output — root, a hashed JS asset,
+  and both SPA-fallback routes all verified to return the right status,
+  content-type, and headers — not just written and assumed correct.
+- **`"start": "node server.js"`** added to `package.json`.
+- **`README.md`** replaced (it was still the unedited Vite scaffold
+  default) with real setup/build/deploy docs, including the Railway +
+  GitHub checklist and environment variables needed on both services.
+
+**The one gotcha worth repeating outside the README too:** `VITE_API_URL`
+is baked into the JS bundle at **build time**, not read at runtime (Vite's
+`import.meta.env.*` behavior). It has to be set on the Railway frontend
+service *before* the first build, and the service needs a redeploy — not
+just a restart — if it's ever changed. Setting it only as a runtime
+variable, or setting it after the first deploy without rebuilding, will
+silently ship a build that calls the wrong API origin.
+
+Backend repo (separate, already covered earlier in this conversation —
+Azure cleanup, Postgres-only DB config, Dockerfile) has a real
+`.gitignore` (`bin/`, `obj/`, dev-secrets file excluded) and no committed
+secrets — `Jwt:Secret` and the email password are empty in
+`appsettings.json`, meant to be supplied as Railway environment variables
+(`Jwt__Secret`, etc.), and the committed Postgres connection string is a
+local-dev placeholder (`Password=CHANGE_ME`), not a real credential.
