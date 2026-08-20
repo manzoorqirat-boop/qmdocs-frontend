@@ -37,12 +37,12 @@ function StatusMsg({ msg }: { msg: string }) {
 }
 
 const SECTIONS: Record<string, string> = {
-  security: 'System Settings (Security & Compliance)',
-  email: 'Email / SMTP Configuration',
-  masterData: 'Document Master Data',
-  qaDept: 'QA / Checker Department',
-  printDepts: 'Print / Download Departments',
-  makerChecker: 'Maker-Checker Approval',
+  security: 'Security Settings',
+  email: 'Email Notifications',
+  masterData: 'Signing Statements',
+  qaDept: 'Approval Department',
+  printDepts: 'Print & Download Access',
+  makerChecker: 'Dual Approval (Maker-Checker)',
 };
 const SECURITY_KEYS = ['minPasswordLength', 'passwordExpiry', 'passwordHistory', 'maxFailedAttempts', 'lockoutDuration', 'sessionTimeout', 'systemVersion'];
 const EMAIL_KEYS = ['emailEnabled', 'smtpHost', 'smtpPort', 'gmailUser', 'gmailPass', 'fromEmail', 'fromName'];
@@ -53,15 +53,15 @@ const EMAIL_KEYS = ['emailEnabled', 'smtpHost', 'smtpPort', 'gmailUser', 'gmailP
 // exactly one of the existing cards below; content and logic underneath
 // is unchanged, only how you get to it.
 const SECTION_NAV = [
-  { key: 'logo', label: 'Company Logo', adminOnly: true },
-  { key: 'security', label: 'System Settings', adminOnly: true },
-  { key: 'email', label: 'Email / SMTP', adminOnly: true },
-  { key: 'masterData', label: 'Document Master Data', adminOnly: true },
-  { key: 'qaDept', label: 'QA / Checker Department', adminOnly: true },
-  { key: 'printDepts', label: 'Print / Download Departments', adminOnly: true },
-  { key: 'makerChecker', label: 'Maker-Checker Approval', adminOnly: true },
+  { key: 'logo', label: 'Homepage Banner', adminOnly: true },
+  { key: 'security', label: 'Security Settings', adminOnly: true },
+  { key: 'email', label: 'Email Notifications', adminOnly: true },
+  { key: 'masterData', label: 'Signing Statements', adminOnly: true },
+  { key: 'qaDept', label: 'Approval Department', adminOnly: true },
+  { key: 'printDepts', label: 'Print & Download Access', adminOnly: true },
+  { key: 'makerChecker', label: 'Dual Approval', adminOnly: true },
   { key: 'reminders', label: 'Signature Reminders', adminOnly: true },
-  { key: 'designations', label: 'Designation Master', adminOnly: true },
+  { key: 'designations', label: 'Job Titles', adminOnly: true },
   { key: 'password', label: 'Change Password', adminOnly: false },
 ] as const;
 type SectionKey = (typeof SECTION_NAV)[number]['key'];
@@ -383,7 +383,7 @@ export function SettingsPage() {
               {/* Company Logo */}
               <Card>
             <CardHeader>
-              <CardTitle>Company Logo</CardTitle>
+              <CardTitle>Homepage Banner</CardTitle>
               <CardDescription className="font-record uppercase">Superadmin only · shown on the login screen</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap items-start gap-5">
@@ -444,7 +444,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>System Settings</CardTitle>
+                <CardTitle>Security Settings</CardTitle>
                 <CardDescription className="font-record uppercase">
                   Security &amp; compliance · 21 CFR Part 11 · {isSuperAdmin ? 'Super Admin' : 'View-only (Administrator required to edit)'}
                 </CardDescription>
@@ -478,7 +478,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Email / SMTP Configuration</CardTitle>
+                <CardTitle>Email Notifications</CardTitle>
                 <CardDescription className="font-record uppercase">Notifications · {isSuperAdmin ? 'Super Admin' : 'View-only (Administrator required to edit)'}</CardDescription>
               </div>
               {isSuperAdmin && <SaveBtn savedHere={savedSection === 'email'} pending={saveSettings.isPending} onClick={() => openSaveModal('email')} />}
@@ -519,7 +519,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Document Master Data</CardTitle>
+                <CardTitle>Signing Statements</CardTitle>
                 <CardDescription className="font-record uppercase">Signing attestation statements · saved independently</CardDescription>
               </div>
               {isSuperAdmin && <SaveBtn savedHere={savedSection === 'masterData'} pending={saveSettings.isPending} onClick={() => openSaveModal('masterData')} />}
@@ -550,14 +550,14 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>QA / Checker Department</CardTitle>
+                <CardTitle>Approval Department</CardTitle>
                 <CardDescription className="font-record uppercase">Maker-checker approvers · saved independently</CardDescription>
               </div>
               {isSuperAdmin && <SaveBtn savedHere={savedSection === 'qaDept'} pending={saveSettings.isPending} onClick={() => openSaveModal('qaDept')} />}
             </CardHeader>
             <CardContent>
               <div className="max-w-[420px]">
-                <div className="mb-2 text-[12px] text-slate">Approvers in this department act as the Maker-Checker approvers (checkers) for staged change requests.</div>
+                <div className="mb-2 text-[12px] text-slate">Approvers in this department review and approve staged change requests.</div>
                 <Select value={printDept || '__none'} onValueChange={(v) => setPrintDept(v === '__none' ? '' : v)} disabled={!isSuperAdmin}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="— Select department —" />
@@ -585,7 +585,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Print / Download Departments</CardTitle>
+                <CardTitle>Print & Download Access</CardTitle>
                 <CardDescription className="font-record uppercase">Multi-select · saved independently</CardDescription>
               </div>
               {isSuperAdmin && <SaveBtn savedHere={savedSection === 'printDepts'} pending={saveSettings.isPending} onClick={() => openSaveModal('printDepts')} />}
@@ -594,7 +594,7 @@ export function SettingsPage() {
               <div className="max-w-[420px]">
                 <div className="mb-2 text-[12px] text-slate">
                   All active users in the selected departments may print or download fully-signed PDFs (the document
-                  initiator always can). If none are selected, the QA / Checker department applies.
+                  initiator always can). If none are selected, the Approval department applies.
                 </div>
                 {activeDepts.length === 0 ? (
                   <div className="text-[12px] text-slate">No active departments found.</div>
@@ -625,7 +625,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Maker-Checker Approval</CardTitle>
+                <CardTitle>Dual Approval (Maker-Checker)</CardTitle>
                 <CardDescription className="font-record uppercase">4-eyes change control · saved independently</CardDescription>
               </div>
               {isSuperAdmin && <SaveBtn savedHere={savedSection === 'makerChecker'} pending={saveSettings.isPending} onClick={() => openSaveModal('makerChecker')} />}
@@ -640,7 +640,7 @@ export function SettingsPage() {
                 [
                   { key: 'Site' as const, label: 'Sites', desc: 'New, edited, or deactivated sites require approval.' },
                   { key: 'Department' as const, label: 'Departments', desc: 'New, edited, or deactivated departments require approval.' },
-                  { key: 'Settings' as const, label: 'Document Master Data', desc: 'Changes to signing attestations & print/download department require approval.' },
+                  { key: 'Settings' as const, label: 'Signing Statements', desc: 'Changes to signing attestations & print/download department require approval.' },
                 ]
               ).map((row) => (
                 <div key={row.key} className="flex items-center gap-2.5 border-t border-line py-2 first:border-t-0">
@@ -742,7 +742,7 @@ export function SettingsPage() {
               <Card>
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Designation Master</CardTitle>
+                <CardTitle>Job Titles</CardTitle>
                 <CardDescription className="font-record uppercase">Job titles offered when creating/editing users · saved independently</CardDescription>
               </div>
               {isSuperAdmin && (
