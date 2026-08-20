@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { ShieldCheck, User, Lock, Eye, EyeOff, ArrowRight, Loader2, Lock as LockSmall } from 'lucide-react';
 import { useLoginMutation, useForgotPasswordMutation, useResetPasswordMutation } from '@/features/auth/hooks';
 import { useCompanyLogo } from '@/features/company/hooks';
@@ -33,6 +34,7 @@ function isLoggedOutEverywhere(data: unknown): data is { loggedOut: true; messag
 }
 
 export function LoginPage() {
+  const navigate = useNavigate();
   const { login } = useSession();
   const loginMutation = useLoginMutation();
   const forgotMutation = useForgotPasswordMutation();
@@ -127,6 +129,10 @@ export function LoginPage() {
     // for the session gate to take over from here (PasswordChangeGate).
     saveSession(data as LoginResponse);
     login(data as LoginResponse);
+    // Session state is now updated, but TanStack Router route guards only
+    // run on navigation — they don't watch React state. Without this call
+    // the app would stay stuck on /login even after a successful response.
+    navigate({ to: '/app/dashboard' });
   }
 
   async function decideSession(decision: 'replace' | 'logoutAll') {
