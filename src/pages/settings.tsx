@@ -118,16 +118,25 @@ export function SettingsPage() {
   const isSuperAdmin = user?.role === 'Administrator';
   const [activeSection, setActiveSection] = useState<SectionKey>(isAdmin ? 'logo' : 'password');
 
-  const { data: settingsRaw = [], isLoading } = useSettingsList();
+  const { data: settingsData, isLoading } = useSettingsList();
   const { data: departments = [] } = useDepartments();
   const saveSettings = useSaveSettings();
 
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [prevSettingsRaw, setPrevSettingsRaw] = useState(settingsRaw);
-  if (settingsRaw !== prevSettingsRaw) {
-    setPrevSettingsRaw(settingsRaw);
+  // Compare the raw query result, not a defaulted copy — `data ?? []` (or
+  // `= []` in a destructure) creates a NEW array every render while the
+  // query is still loading, which is never reference-equal to the last
+  // render's fresh array. That made this condition true on every single
+  // render (not just when new data actually arrived), which is exactly
+  // React's "too many re-renders" case (error #301) — this broke the page
+  // on every load, not intermittently. `settingsData` itself stays
+  // `undefined` (stable via `===`) until the query resolves, so this is
+  // safe the same way the other state-sync blocks in this file already are.
+  const [prevSettingsData, setPrevSettingsData] = useState(settingsData);
+  if (settingsData !== prevSettingsData) {
+    setPrevSettingsData(settingsData);
     const map: Record<string, string> = {};
-    settingsRaw.forEach((s) => {
+    (settingsData || []).forEach((s) => {
       map[s.key] = s.value;
     });
     setSettings(map);
