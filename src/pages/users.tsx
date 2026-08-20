@@ -42,9 +42,9 @@ import { PasswordConfirmDialog, type PasswordConfirmAction } from '@/components/
 import { MultiRoleDialog } from '@/features/users/multi-role-dialog';
 import { ProfileDialog } from '@/features/users/profile-dialog';
 import { AssignmentDialog } from '@/features/users/assignment-dialog';
+import { useAssignableRoles } from '@/features/privileges/hooks';
 import type { UserDirectoryEntry } from '@/types/api';
 
-const ROLES = ['Author', 'Reviewer', 'Approver', 'IT Admin', 'Administrator'];
 const ADMIN_ROLES = ['IT Admin', 'Administrator'];
 const PAGE_SIZE = 10;
 
@@ -64,6 +64,7 @@ const NEW_USER_EMPTY = {
 export function UsersPage() {
   const { user } = useSession();
   const isAdmin = ADMIN_ROLES.includes(user?.role || '');
+  const { roles: ROLES } = useAssignableRoles();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
