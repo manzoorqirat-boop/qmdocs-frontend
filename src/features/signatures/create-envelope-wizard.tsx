@@ -1,20 +1,23 @@
 import { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
 import {
-  ArrowLeft,
-  ArrowRight,
-  MoveRight,
+  ChevronDown,
   Check,
   Circle,
   FileText,
   Paperclip,
   PenLine,
+  X,
+  Plus,
+  ArrowDown,
+  Mail,
+  User as UserIcon,
 } from 'lucide-react';
 import { useCreateEnvelope, useCheckDocNumbers } from '@/features/envelopes/hooks';
 import { UserSearchPicker } from '@/features/signatures/user-search-picker';
 import { SignaturePad } from '@/features/signatures/signature-pad';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { STEP_DEFS, ALL_ROLES_FOR_CUSTOM, stepColor, SIGNING_MEANING } from '@/features/signatures/constants';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,8 +31,6 @@ const PdfSignaturePlacer = lazy(() =>
   import('@/features/signatures/pdf-signature-placer').then((m) => ({ default: m.PdfSignaturePlacer })),
 );
 const PDF_LOADING_FALLBACK = <div className="p-6 text-[13px] text-slate">Loading PDF viewer…</div>;
-
-const WIZARD_STEPS = ['Details', 'Recipients', 'Place Signatures', 'Sign as Author'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface CustomSig {
@@ -46,7 +47,6 @@ interface WizardRecipient {
   email?: string;
   validityDays?: number;
 }
-/** Local box shape carries a docIndex, unlike the placer's per-document SignatureBox. */
 interface WizardBox extends PlacementBox {
   docIndex: number;
 }
@@ -60,15 +60,111 @@ interface CreateEnvelopeWizardProps {
   onCreated: () => void;
 }
 
+// A collapsible panel in the right rail — every section is independently
+// open/closed, none of them gate access to the others. This is the
+// structural difference from a step wizard: there's no "you must finish
+// this before you can see that."
+function Section({
+  title,
+  badge,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  badge?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-line">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">{title}</span>
+        <span className="flex items-center gap-2">
+          {badge}
+          <ChevronDown size={14} className={cn('text-slate transition-transform', !open && '-rotate-90')} />
+        </span>
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
+// A node in the routing chain — how each recipient is presented. Clicking
+// one both lets you assign/change who it is AND activates it for
+// placement on the canvas to the left, so assigning a person and placing
+// their box are the same continuous motion instead of two separate steps.
+// Module-scope (not defined inside CreateEnvelopeWizard) so it isn't
+// recreated as a new component type on every render — activeRecipient and
+// the activation handler come in as props instead of closure state.
+function RoutingNode({
+  color,
+  letter,
+  label,
+  sub,
+  rKey,
+  placedHere,
+  showCheck,
+  activeRecipient,
+  onActivate,
+  onRemove,
+  children,
+}: {
+  color: string;
+  letter: string;
+  label: string;
+  sub?: string;
+  rKey: string;
+  placedHere: boolean;
+  showCheck: boolean;
+  activeRecipient: string;
+  onActivate: (key: string) => void;
+  onRemove?: () => void;
+  children: React.ReactNode;
+}) {
+  const isActive = activeRecipient === rKey;
+  return (
+    <div className="relative flex gap-2.5 pb-3 pl-1 last:pb-0">
+      <div className="absolute top-[26px] bottom-0 left-[13px] w-px bg-line last:hidden" aria-hidden="true" />
+      <button
+        onClick={() => onActivate(rKey)}
+        title="Click, then drag on the document to place this recipient's box"
+        className="relative z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+        style={{ background: color, boxShadow: isActive ? `0 0 0 3px ${color}33` : undefined }}
+      >
+        {placedHere && showCheck ? <Check size={13} /> : letter}
+      </button>
+      <div
+        className={cn('min-w-0 flex-1 rounded-md border px-2.5 py-2', isActive ? 'border-2' : 'border-line-strong border-dashed')}
+        style={isActive ? { borderColor: color, background: `${color}0d` } : undefined}
+      >
+        <div className="mb-1 flex items-center justify-between gap-1.5">
+          <span className="text-[11px] font-bold tracking-wide uppercase" style={{ color }}>
+            {label}
+          </span>
+          {onRemove && (
+            <button onClick={onRemove} title="Remove" className="text-slate hover:text-danger">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {sub && <div className="mb-1 text-[10px] text-slate">{sub}</div>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function CreateEnvelopeWizard({ currentUser, users, departments, sites = [], onClose, onCreated }: CreateEnvelopeWizardProps) {
   const homeSiteId = currentUser?.siteId;
-  const [step, setStep] = useState(1);
   const [err, setErr] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createMutation = useCreateEnvelope();
   const checkDocNumbers = useCheckDocNumbers();
 
-  // Step 1 — Details
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -77,7 +173,6 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
   const [dupNumbers, setDupNumbers] = useState<string[]>([]);
   const [overrodeDup, setOverrodeDup] = useState(false);
 
-  // Step 2 — Recipients
   const [routingType, setRoutingType] = useState<'sequential' | 'parallel'>('sequential');
   const [reviewers, setReviewers] = useState<string[]>(['']);
   const [approver, setApprover] = useState('');
@@ -85,13 +180,11 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
   const [includeApprover, setIncludeApprover] = useState(true);
   const [customSigs, setCustomSigs] = useState<CustomSig[]>([]);
 
-  // Step 3 — Placement
   const [activeRecipient, setActiveRecipient] = useState('');
   const [boxes, setBoxes] = useState<WizardBox[]>([]);
   const [effDateBoxes, setEffDateBoxes] = useState<WizardBox[]>([]);
   const [previewDocIdx, setPreviewDocIdx] = useState(0);
 
-  // Step 4 — Author sign
   const [esigPassword, setEsigPassword] = useState('');
   const [authorSigData, setAuthorSigData] = useState('');
   const [authorComment, setAuthorComment] = useState('');
@@ -171,8 +264,6 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
         const res = await checkDocNumbers.mutateAsync(entered);
         if (cancelled) return;
         const dups = res?.duplicates || [];
-        // duplicates come back as bare strings from the API; pair with usage
-        // is not returned by this lightweight endpoint, so show the number only.
         setDupDetail(dups.map((n: string) => ({ number: n, usedIn: [] })));
         setDupNumbers(dups.map((n: string) => n.trim().toLowerCase()));
         setOverrodeDup(false);
@@ -190,16 +281,45 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docNumbers]);
 
-  function step2Valid() {
-    const expected = recipientUsernames.length * files.length;
-    return new Set(boxes.map((b) => `${b.recipientUsername}|${b.docIndex}`)).size >= expected;
-  }
-  function step3Valid() {
-    return !!esigPassword && !!authorSigData;
-  }
+  const placedCount = new Set(boxes.map((b) => `${b.recipientUsername}|${b.docIndex}`)).size;
+  const placementExpected = recipientUsernames.length * files.length;
+  const placementComplete = files.length > 0 && placedCount >= placementExpected;
+
+  // Every blocking condition, computed continuously rather than gating
+  // navigation between steps — this is the readiness checklist shown in
+  // the footer, and also what handleSubmit checks before sending.
+  const blockers = useMemo(() => {
+    const list: string[] = [];
+    if (!title.trim()) list.push('Add a title');
+    if (files.length === 0) list.push('Upload at least one document');
+    if (docNumbers.some((n) => n && n.length > 0 && !n.trim())) list.push('A document number cannot be just spaces');
+    if (dupDetail.length > 0 && !overrodeDup) list.push('Acknowledge the duplicate document number warning');
+    if (includeReviewers && reviewers.some((r) => !r)) list.push('Assign every Reviewer slot (or turn Reviewers off)');
+    if (includeApprover && !approver) list.push('Assign an Approver (or turn approval off)');
+    for (const c of customSigs) {
+      const label = c.label.trim();
+      if (c.isExternal) {
+        if (!label) list.push('Every external signatory needs a role label');
+        else if (!c.email || !EMAIL_RE.test(c.email.trim())) list.push(`Enter a valid email for "${label}"`);
+      } else if ((c.username && !label) || (!c.username && label)) {
+        list.push('Every additional signatory needs both a label and a person');
+      }
+    }
+    const uniq = new Set(recipientUsernames);
+    if (uniq.size !== recipientUsernames.length) list.push('Each person can appear only once');
+    if (files.length > 0 && !placementComplete) {
+      list.push(`Place a signature box for every recipient on every document (${placedCount}/${placementExpected})`);
+    }
+    if (!authorSigData) list.push('Provide your signature');
+    if (!esigPassword) list.push('Enter your password to sign');
+    return list;
+  }, [title, files, docNumbers, dupDetail, overrodeDup, includeReviewers, reviewers, includeApprover, approver, customSigs, recipientUsernames, placementComplete, placedCount, placementExpected, authorSigData, esigPassword]);
 
   async function handleSubmit() {
-    if (!step3Valid()) return setErr('Password and signature are required.');
+    if (blockers.length > 0) {
+      setErr(blockers[0]);
+      return;
+    }
     setErr('');
     try {
       const fd = new FormData();
@@ -235,555 +355,325 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
     }
   }
 
-  function goNext() {
-    setErr('');
-    if (step === 1) {
-      if (!title.trim()) return setErr('Document title is required.');
-      if (files.length === 0) return setErr('Upload at least one PDF document.');
-      if (docNumbers.some((n) => n && n.length > 0 && !n.trim())) return setErr('A document number cannot be just spaces.');
-      if (dupDetail.length > 0 && !overrodeDup) return setErr('Acknowledge the duplicate document number warning to continue.');
-    }
-    if (step === 2) {
-      if (includeReviewers && reviewers.some((r) => !r)) return setErr('Select a user for every Reviewer slot, or turn off "Include Reviewers".');
-      if (includeApprover && !approver) return setErr('Select an Approver, or turn off "Require approval".');
-      for (const c of customSigs) {
-        const label = c.label.trim();
-        if (c.isExternal) {
-          if (!label) return setErr('Each external signatory needs a role label.');
-          if (!c.email || !EMAIL_RE.test(c.email.trim())) return setErr(`Enter a valid email for the external signatory "${label || '(unnamed)'}".`);
-          const v = Number(c.validityDays ?? 7);
-          if (!Number.isFinite(v) || v < 1 || v > 30) return setErr('External link validity must be 1–30 days.');
-        } else if ((c.username && !label) || (!c.username && label)) {
-          return setErr('Each additional signatory needs both a capacity label and a person.');
-        }
-        if (['Author', 'Reviewer', 'Approver'].includes(label)) return setErr('Use the built-in Reviewer/Approver steps for those capacities.');
-      }
-      const uniq = new Set(recipientUsernames);
-      if (uniq.size !== recipientUsernames.length) return setErr('Each person can appear only once in the workflow.');
-    }
-    if (step === 3 && !step2Valid()) {
-      const expected = recipientUsernames.length * files.length;
-      const placed = new Set(boxes.map((b) => `${b.recipientUsername}|${b.docIndex}`)).size;
-      return setErr(`Place a signature box for every recipient on every document (${expected} needed, ${placed} placed).`);
-    }
-    setStep((s) => s + 1);
-  }
-
   const busy = createMutation.isPending;
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className={cn(step === 3 ? 'max-w-5xl' : 'max-w-3xl')}>
-        <DialogHeader>
+      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-6xl! flex-col gap-0 p-0">
+        <DialogHeader className="border-b border-line px-5 py-3.5">
           <DialogTitle>New Document</DialogTitle>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {WIZARD_STEPS.map((label, i) => {
-              const n = i + 1;
-              const done = n < step;
-              const current = n === step;
-              return (
-                <div key={n} className="flex items-center gap-1.5">
-                  <div
-                    className={cn(
-                      'flex size-[22px] items-center justify-center rounded-full text-[11px] font-bold',
-                      done ? 'bg-success text-white' : current ? 'bg-seal text-white' : 'bg-paper text-slate',
-                    )}
-                  >
-                    {done ? <Check size={13} /> : n}
-                  </div>
-                  <span className={cn('text-[11px]', current ? 'font-semibold text-seal' : done ? 'text-success' : 'text-slate')}>{label}</span>
-                  {i < WIZARD_STEPS.length - 1 && <span className="ml-0.5 text-[13px] text-line-strong">›</span>}
-                </div>
-              );
-            })}
-          </div>
         </DialogHeader>
 
-        {err && <div className="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">{err}</div>}
+        <div className="flex min-h-0 flex-1">
+          {/* Document canvas — always visible once a file exists, never
+              hidden behind a step. */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-paper">
+            {files.length === 0 ? (
+              <div
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleFileAdd(e.dataTransfer.files);
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+                className="m-6 flex flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-line-strong text-center"
+              >
+                <Paperclip size={28} className="mb-3 text-slate" />
+                <div className="mb-1 text-[15px] font-semibold text-ink">Drop PDFs here, or click to browse</div>
+                <div className="text-[12.5px] text-slate">Up to 10 documents · the document stays on screen the whole time you're setting this up</div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => e.target.files && handleFileAdd(e.target.files)}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col overflow-hidden p-4">
+                {files.length > 1 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {files.map((f, i) => (
+                      <Button key={i} variant={previewDocIdx === i ? 'default' : 'ghost'} size="sm" onClick={() => setPreviewDocIdx(i)}>
+                        Doc {i + 1}: {f.name.slice(0, 18)}
+                        {f.name.length > 18 ? '…' : ''}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <ErrorBoundary label="Signature placement">
+                    {placerFileSource ? (
+                      <Suspense fallback={PDF_LOADING_FALLBACK}>
+                        <PdfSignaturePlacer
+                          fileSource={placerFileSource}
+                          recipients={allRecipients.map((r) => ({ username: recipientKey(r), role: r.stepLabel === 'Approver' ? 'Approver' : 'Signer', stepLabel: r.stepLabel }))}
+                          activeRecipient={activeRecipient}
+                          boxes={placerBoxes}
+                          onBoxesChange={handlePlacerChange}
+                          mode="place"
+                        />
+                      </Suspense>
+                    ) : (
+                      <div className="p-5 text-[13px] text-slate">No document selected.</div>
+                    )}
+                  </ErrorBoundary>
+                </div>
+              </div>
+            )}
+          </div>
 
-        {/* STEP 1: Details */}
-        {step === 1 && (
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-            <div>
+          {/* Persistent rail — every section independently open, nothing
+              gated behind finishing another one first. */}
+          <div className="flex w-[400px] shrink-0 flex-col overflow-y-auto border-l border-line">
+            <Section title="Document" defaultOpen={files.length === 0} badge={title.trim() && files.length > 0 ? <Check size={14} className="text-success" /> : undefined}>
               <div className="mb-2.5 flex flex-col gap-1.5">
-                <Label>Document Title *</Label>
+                <Label>Title *</Label>
                 <Input placeholder="e.g. SOP-42 Revision Approval" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="mb-2.5 flex flex-col gap-1.5">
                 <Label>
-                  Message to Recipients <span className="font-normal text-slate">(optional)</span>
+                  Message <span className="font-normal text-slate">(optional)</span>
                 </Label>
                 <textarea
-                  rows={4}
+                  rows={2}
                   className="w-full rounded-md border border-line-strong bg-paper-raised px-3 py-2 text-sm text-ink outline-none focus-visible:border-seal focus-visible:ring-2 focus-visible:ring-seal-ring"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                 />
               </div>
-            </div>
-
-            <div>
-              <div className="mb-2.5 flex flex-col gap-1.5">
-                <Label>
-                  Upload PDFs * <span className="font-normal text-slate">up to 10</span>
-                </Label>
-                <div
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleFileAdd(e.dataTransfer.files);
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="cursor-pointer rounded-md border-2 border-dashed border-line-strong bg-paper px-3 py-4 text-center"
-                >
-                  <div className="mb-1 flex justify-center text-slate">
-                    <Paperclip size={20} />
-                  </div>
-                  <div className="text-[13px] text-ink-soft">Drop PDFs here or click to browse</div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={(e) => e.target.files && handleFileAdd(e.target.files)}
-                  />
-                </div>
-              </div>
-
               {files.length > 0 && (
-                <div className="flex flex-col gap-1.5">
+                <div className="mb-2 flex flex-col gap-1.5">
                   {files.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2.5 rounded-md border border-line bg-paper px-2.5 py-1.5 text-[12px]">
-                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                        <FileText size={13} className="shrink-0" />
-                        <span className="truncate">{f.name}</span>
-                        <span className="shrink-0 text-slate">({(f.size / 1024).toFixed(0)} KB)</span>
-                      </span>
+                    <div key={i} className="flex items-center gap-1.5 rounded-md border border-line bg-paper px-2 py-1.5 text-[11.5px]">
+                      <FileText size={12} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{f.name}</span>
                       <Input
-                        className={cn(
-                          'h-7 w-[150px] shrink-0 text-[12px]',
-                          dupNumbers.includes((docNumbers[i] || '').trim().toLowerCase()) && (docNumbers[i] || '').trim() && 'border-warning',
-                        )}
-                        placeholder="Document No. (optional)"
+                        className={cn('h-6.5 w-[110px] shrink-0 text-[11px]', dupNumbers.includes((docNumbers[i] || '').trim().toLowerCase()) && (docNumbers[i] || '').trim() && 'border-warning')}
+                        placeholder="Doc No."
                         value={docNumbers[i] || ''}
                         onChange={(e) => setDocNumbers((prev) => prev.map((n, j) => (j === i ? e.target.value : n)))}
                       />
-                      <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={() => removeFile(i)}>
-                        Remove
-                      </Button>
+                      <button onClick={() => removeFile(i)} className="shrink-0 text-slate hover:text-danger">
+                        <X size={13} />
+                      </button>
                     </div>
                   ))}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-line-strong py-1.5 text-[11.5px] text-slate hover:text-ink"
+                  >
+                    <Plus size={12} /> Add another document
+                  </button>
                 </div>
               )}
-
               {dupDetail.length > 0 && (
-                <div className="mt-2.5 rounded-md border border-warning/40 bg-warning-soft px-3 py-2.5 text-[12.5px]">
-                  <div className="mb-1.5 font-semibold text-warning">
-                    ⚠ Duplicate document number{dupDetail.length > 1 ? 's' : ''} detected
-                  </div>
-                  <div className="mb-2 text-ink-soft">
-                    {dupDetail.map((d, k) => (
-                      <div key={k}>
-                        <strong>{d.number}</strong> already exists on another envelope.
-                      </div>
-                    ))}
-                  </div>
-                  <label className="flex cursor-pointer items-center gap-1.5 text-ink-soft">
+                <div className="mt-1 rounded-md border border-warning/40 bg-warning-soft px-2.5 py-2 text-[11.5px]">
+                  <div className="mb-1 font-semibold text-warning">⚠ Duplicate document number{dupDetail.length > 1 ? 's' : ''}</div>
+                  {dupDetail.map((d, k) => (
+                    <div key={k} className="text-ink-soft">
+                      <strong>{d.number}</strong> already exists.
+                    </div>
+                  ))}
+                  <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-ink-soft">
                     <Checkbox checked={overrodeDup} onCheckedChange={(c) => setOverrodeDup(!!c)} />
-                    Use {dupDetail.length > 1 ? 'these numbers' : 'this number'} anyway (this override will be recorded in the
-                    audit trail)
+                    Use anyway (recorded in the audit trail)
                   </label>
                 </div>
               )}
-            </div>
-          </div>
-        )}
+            </Section>
 
-        {/* STEP 2: Recipients */}
-        {step === 2 && (
-          <div>
-            <div className="mb-3.5 text-[12px] text-slate">
-              Search by name, username, email or department. Use the department pills (and the site toggle, if shown) to
-              narrow a long list.
-            </div>
-
-            <div className="mb-3 flex flex-col gap-1.5">
-              <Label>Routing</Label>
-              <div className="flex gap-1.5">
+            <Section
+              title="Routing"
+              badge={<span className="text-[10.5px] text-slate">{allRecipients.length} signer{allRecipients.length === 1 ? '' : 's'}</span>}
+            >
+              <div className="mb-3 flex gap-1.5">
                 {(['sequential', 'parallel'] as const).map((opt) => (
                   <button
                     key={opt}
-                    type="button"
                     onClick={() => setRoutingType(opt)}
                     className={cn(
-                      'flex-1 rounded-md border-[1.5px] px-2.5 py-2 text-left text-[12px] font-semibold',
-                      routingType === opt ? 'border-seal bg-seal-soft text-seal' : 'border-line-strong bg-paper-raised text-ink-soft',
+                      'flex-1 rounded-md border-[1.5px] px-2 py-1.5 text-[11.5px] font-semibold',
+                      routingType === opt ? 'border-seal bg-seal-soft text-seal' : 'border-line-strong text-ink-soft',
                     )}
                   >
-                    <span className="flex items-center gap-1.5">
-                      {opt === 'sequential' ? <ArrowRight size={13} /> : <MoveRight size={13} />}
-                      {opt === 'sequential' ? 'Sequential' : 'Parallel'}
-                    </span>
-                    <div className={cn('mt-0.5 text-[10px] font-normal', routingType === opt ? 'text-seal' : 'text-slate')}>
-                      {opt === 'sequential' ? 'One by one in order' : 'All reviewers at once'}
-                    </div>
+                    {opt === 'sequential' ? 'Sequential' : 'Parallel'}
+                    <div className="text-[9.5px] font-normal opacity-80">{opt === 'sequential' ? 'One after another' : 'Reviewers at once'}</div>
                   </button>
                 ))}
               </div>
-            </div>
 
-            <div className="mb-2 rounded-md border border-seal bg-seal-soft px-3 py-2">
-              <div className="mb-0.5 text-[10px] font-bold tracking-wide text-seal uppercase">Author · Step 1 · Signs at creation</div>
-              <div className="text-[13px] font-semibold text-ink">{currentUser.fullName || currentUser.username}</div>
-              <div className="text-[11px] text-slate">
-                @{currentUser.username} · {currentUser.role}
-              </div>
-            </div>
+              <RoutingNode color={STEP_DEFS.Author.color} letter="A" label="Author" sub="You · signs now" rKey={currentUser.username} placedHere={boxes.some((b) => b.recipientUsername === currentUser.username && b.docIndex === previewDocIdx)} showCheck={files.length > 0} activeRecipient={activeRecipient} onActivate={setActiveRecipient}>
+                <div className="text-[12px] font-medium text-ink">{currentUser.fullName || currentUser.username}</div>
+              </RoutingNode>
 
-            <div className="mb-2">
-              <div className="mb-1.5 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-[13px] font-medium text-ink-soft">
-                  <Checkbox checked={includeReviewers} onCheckedChange={(c) => setIncludeReviewers(!!c)} />
-                  Include Reviewers{includeReviewers ? ` (${reviewers.length}/10)` : ''}
-                  <span className="ml-1.5 text-[10px] font-normal text-slate">role: Reviewer</span>
-                </label>
-                {includeReviewers && (
-                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={addReviewer} disabled={reviewers.length >= 10}>
-                    + Add
-                  </Button>
-                )}
-              </div>
-              {!includeReviewers ? (
-                <div className="px-0.5 py-1.5 text-[12px] text-slate">Review step skipped — no Reviewer will sign this document.</div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-                  {reviewers.map((u, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5">
-                      <div
-                        className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                        style={{ background: STEP_DEFS.Reviewer.color }}
-                      >
-                        R{idx + 1}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <UserSearchPicker
-                          users={users}
-                          departments={departments}
-                          sites={sites}
-                          homeSiteId={homeSiteId}
-                          allowedRoles={STEP_DEFS.Reviewer.allowedRoles}
-                          excludeUsernames={recipientUsernames.filter((un) => un && un !== u)}
-                          value={u}
-                          onChange={(v) => updateReviewer(idx, v)}
-                          label="— Search reviewer —"
-                          accentColor={STEP_DEFS.Reviewer.color}
-                        />
-                      </div>
-                      <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={() => removeReviewer(idx)} disabled={reviewers.length <= 1}>
-                        −
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-2">
-              <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-ink-soft">
-                <Checkbox checked={includeApprover} onCheckedChange={(c) => setIncludeApprover(!!c)} />
-                Require approval
-                <span className="ml-1.5 text-[10px] font-normal text-slate">role: Approver</span>
-              </label>
-              {!includeApprover ? (
-                <div className="px-0.5 py-1.5 text-[12px] text-slate">
-                  Approval step skipped — the document completes once the Author{includeReviewers ? ' and Reviewers have' : ' has'}{' '}
-                  signed. Effective-date placement is unavailable without an Approver.
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                    style={{ background: STEP_DEFS.Approver.color }}
+              {includeReviewers ? (
+                reviewers.map((u, idx) => (
+                  <RoutingNode
+                    key={idx}
+                    color={STEP_DEFS.Reviewer.color}
+                    letter={`R${idx + 1}`}
+                    label={`Reviewer ${reviewers.length > 1 ? idx + 1 : ''}`}
+                    rKey={u || `reviewer-${idx}`}
+                    placedHere={!!u && boxes.some((b) => b.recipientUsername === u && b.docIndex === previewDocIdx)}
+                    showCheck={files.length > 0}
+                    activeRecipient={activeRecipient}
+                    onActivate={setActiveRecipient}
+                    onRemove={reviewers.length > 1 ? () => removeReviewer(idx) : undefined}
                   >
-                    A
-                  </div>
-                  <div className="min-w-0 flex-1">
                     <UserSearchPicker
                       users={users}
                       departments={departments}
                       sites={sites}
                       homeSiteId={homeSiteId}
-                      allowedRoles={STEP_DEFS.Approver.allowedRoles}
-                      excludeUsernames={recipientUsernames.filter((u) => u && u !== approver)}
-                      value={approver}
-                      onChange={setApprover}
-                      label="— Search approver —"
-                      accentColor={STEP_DEFS.Approver.color}
+                      allowedRoles={STEP_DEFS.Reviewer.allowedRoles}
+                      excludeUsernames={recipientUsernames.filter((un) => un && un !== u)}
+                      value={u}
+                      onChange={(v) => updateReviewer(idx, v)}
+                      label="— Search reviewer —"
+                      accentColor={STEP_DEFS.Reviewer.color}
                     />
-                  </div>
-                </div>
+                  </RoutingNode>
+                ))
+              ) : (
+                <div className="mb-2 pl-9 text-[11.5px] text-slate">Reviewers off.</div>
               )}
-            </div>
+              <div className="mb-3 flex items-center gap-3 pl-9">
+                {includeReviewers && (
+                  <button onClick={addReviewer} disabled={reviewers.length >= 10} className="text-[11.5px] font-semibold text-seal disabled:opacity-40">
+                    + Add reviewer
+                  </button>
+                )}
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate">
+                  <Checkbox checked={includeReviewers} onCheckedChange={(c) => setIncludeReviewers(!!c)} /> Include Reviewers
+                </label>
+              </div>
 
-            <div>
-              <label className="mb-1.5 flex flex-wrap items-center gap-2 text-[13px] font-medium text-ink-soft">
-                Additional signatories
-                <span className="text-[10px] font-normal text-slate">optional · sign after the Approver · e.g. HOD, SAP SME, Executed By (IT)</span>
+              {includeApprover ? (
+                <RoutingNode color={STEP_DEFS.Approver.color} letter="A" label="Approver" rKey={approver || 'approver'} placedHere={!!approver && boxes.some((b) => b.recipientUsername === approver && b.docIndex === previewDocIdx)} showCheck={files.length > 0} activeRecipient={activeRecipient} onActivate={setActiveRecipient}>
+                  <UserSearchPicker
+                    users={users}
+                    departments={departments}
+                    sites={sites}
+                    homeSiteId={homeSiteId}
+                    allowedRoles={STEP_DEFS.Approver.allowedRoles}
+                    excludeUsernames={recipientUsernames.filter((u) => u && u !== approver)}
+                    value={approver}
+                    onChange={setApprover}
+                    label="— Search approver —"
+                    accentColor={STEP_DEFS.Approver.color}
+                  />
+                </RoutingNode>
+              ) : (
+                <div className="mb-2 pl-9 text-[11.5px] text-slate">Approval off.</div>
+              )}
+              <label className="mb-3 flex cursor-pointer items-center gap-1.5 pl-9 text-[11px] text-slate">
+                <Checkbox checked={includeApprover} onCheckedChange={(c) => setIncludeApprover(!!c)} /> Require approval
               </label>
-              {customSigs.map((c, i) => (
-                <div key={i} className={cn('mb-2', c.isExternal && 'rounded-md border border-violet/30 bg-violet-soft p-2')}>
-                  <div className={cn('flex items-center gap-1.5', c.isExternal && 'mb-1.5')}>
-                    <div
-                      className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                      style={{ background: c.isExternal ? VIOLET_HEX : stepColor(c.label.trim() || 'Custom') }}
-                    >
-                      {(c.label.trim()[0] || '+').toUpperCase()}
-                    </div>
+
+              {customSigs.map((c, i) => {
+                const color = c.isExternal ? VIOLET_HEX : stepColor(c.label.trim() || 'Custom');
+                const rKey = c.isExternal ? `external:${(c.email || '').toLowerCase()}` : c.username || `custom-${i}`;
+                return (
+                  <RoutingNode
+                    key={i}
+                    color={color}
+                    letter={(c.label.trim()[0] || '+').toUpperCase()}
+                    label={c.label.trim() || 'Additional signatory'}
+                    sub={c.isExternal ? 'External' : undefined}
+                    rKey={rKey}
+                    placedHere={boxes.some((b) => b.recipientUsername === rKey && b.docIndex === previewDocIdx)}
+                    showCheck={files.length > 0}
+                    activeRecipient={activeRecipient}
+                    onActivate={setActiveRecipient}
+                    onRemove={() => setCustomSigs((list) => list.filter((_, j) => j !== i))}
+                  >
                     <Input
-                      className="h-8 w-[170px] shrink-0 text-[13px]"
-                      placeholder={c.isExternal ? 'Role (e.g. Vendor)' : 'Capacity label * (e.g. HOD)'}
+                      className="mb-1.5 h-7 text-[12px]"
+                      placeholder="Capacity label * (e.g. HOD)"
                       maxLength={40}
                       value={c.label}
                       onChange={(e) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
                     />
-                    <div className="flex shrink-0 overflow-hidden rounded-md border border-line-strong">
+                    <div className="mb-1.5 flex overflow-hidden rounded-md border border-line-strong text-[10.5px]">
                       <button
-                        type="button"
-                        className={cn('px-2 py-1 text-[11px] font-semibold', !c.isExternal ? 'bg-seal text-white' : 'text-ink-soft')}
+                        className={cn('flex-1 py-1 font-semibold', !c.isExternal ? 'bg-seal text-white' : 'text-ink-soft')}
                         onClick={() => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, isExternal: false, email: '' } : x)))}
                       >
-                        Internal
+                        <UserIcon size={10} className="mr-1 inline" /> Internal
                       </button>
                       <button
-                        type="button"
-                        className={cn('px-2 py-1 text-[11px] font-semibold', c.isExternal ? 'bg-violet text-white' : 'text-ink-soft')}
+                        className={cn('flex-1 py-1 font-semibold', c.isExternal ? 'text-white' : 'text-ink-soft')}
+                        style={c.isExternal ? { background: VIOLET_HEX } : undefined}
                         onClick={() => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, isExternal: true, username: '' } : x)))}
                       >
-                        External
+                        <Mail size={10} className="mr-1 inline" /> External
                       </button>
                     </div>
-                    {!c.isExternal && (
-                      <div className="min-w-0 flex-1">
-                        <UserSearchPicker
-                          users={users}
-                          departments={departments}
-                          sites={sites}
-                          homeSiteId={homeSiteId}
-                          allowedRoles={ALL_ROLES_FOR_CUSTOM}
-                          excludeUsernames={recipientUsernames.filter((u) => u && u !== c.username)}
-                          value={c.username}
-                          onChange={(v) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, username: v } : x)))}
-                          label="— Search signatory (any role) —"
-                          accentColor={stepColor(c.label.trim() || 'Custom')}
-                        />
+                    {c.isExternal ? (
+                      <div className="flex gap-1.5">
+                        <Input className="h-7 flex-1 text-[12px]" type="email" placeholder="Vendor email *" value={c.email || ''} onChange={(e) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))} />
+                        <Input className="h-7 w-16 text-[12px]" type="number" min={1} max={30} placeholder="Days" value={c.validityDays ?? 7} onChange={(e) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, validityDays: e.target.value } : x)))} />
                       </div>
+                    ) : (
+                      <UserSearchPicker
+                        users={users}
+                        departments={departments}
+                        sites={sites}
+                        homeSiteId={homeSiteId}
+                        allowedRoles={ALL_ROLES_FOR_CUSTOM}
+                        excludeUsernames={recipientUsernames.filter((u) => u && u !== c.username)}
+                        value={c.username}
+                        onChange={(v) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, username: v } : x)))}
+                        label="— Search person —"
+                        accentColor={color}
+                      />
                     )}
-                    <button
-                      title="Remove signatory"
-                      className="shrink-0 text-slate hover:text-danger"
-                      onClick={() => setCustomSigs((list) => list.filter((_, j) => j !== i))}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {c.isExternal && (
-                    <div className="flex items-center gap-1.5 pl-7">
-                      <Input
-                        className="h-8 flex-1 text-[13px]"
-                        type="email"
-                        placeholder="Vendor email *"
-                        value={c.email || ''}
-                        onChange={(e) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))}
-                      />
-                      <Input
-                        className="h-8 w-[150px] shrink-0 text-[13px]"
-                        type="number"
-                        min={1}
-                        max={30}
-                        placeholder="Link valid (days)"
-                        value={c.validityDays ?? 7}
-                        onChange={(e) => setCustomSigs((list) => list.map((x, j) => (j === i ? { ...x, validityDays: e.target.value } : x)))}
-                      />
-                      <span className="shrink-0 text-[10.5px] font-semibold whitespace-nowrap text-violet">EXTERNAL</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2"
-                onClick={() => setCustomSigs((list) => [...list, { label: '', username: '', isExternal: false }])}
-              >
-                + Add signatory
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Placement */}
-        {step === 3 && (
-          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_260px]">
-            <div>
-              {files.length > 1 && (
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {files.map((f, i) => (
-                    <Button key={i} variant={previewDocIdx === i ? 'default' : 'ghost'} size="sm" onClick={() => setPreviewDocIdx(i)}>
-                      Doc {i + 1}: {f.name.slice(0, 22)}
-                      {f.name.length > 22 ? '…' : ''}
-                    </Button>
-                  ))}
-                </div>
-              )}
-              <ErrorBoundary label="Signature placement">
-                {placerFileSource ? (
-                  <Suspense fallback={PDF_LOADING_FALLBACK}>
-                    <PdfSignaturePlacer
-                      fileSource={placerFileSource}
-                      recipients={allRecipients.map((r) => ({ username: recipientKey(r), role: r.stepLabel === 'Approver' ? 'Approver' : 'Signer', stepLabel: r.stepLabel }))}
-                      activeRecipient={activeRecipient}
-                      boxes={placerBoxes}
-                      onBoxesChange={handlePlacerChange}
-                      mode="place"
-                    />
-                  </Suspense>
-                ) : (
-                  <div className="p-5 text-[13px] text-slate">No document selected.</div>
-                )}
-              </ErrorBoundary>
-            </div>
-
-            <aside className={files.length > 1 ? 'pt-9' : ''}>
-              <div className="mb-2 text-[11px] font-bold tracking-wide text-slate uppercase">Select recipient, then drag on PDF</div>
-              {allRecipients.map((r, i) => {
-                const rKey = recipientKey(r);
-                const color = STEP_DEFS[r.stepLabel]?.color || (r.isExternal ? VIOLET_HEX : stepColor(r.stepLabel));
-                const placedHere = boxes.some((b) => b.recipientUsername === rKey && b.docIndex === previewDocIdx);
-                const placedAll = files.every((_, di) => boxes.some((b) => b.recipientUsername === rKey && b.docIndex === di));
-                const isActive = activeRecipient === rKey;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setActiveRecipient(rKey)}
-                    className="mb-1.5 flex w-full items-center rounded-md border px-2.5 py-1.5 text-left"
-                    style={{ background: isActive ? color : 'var(--color-paper-raised)', borderColor: isActive ? color : 'var(--color-line-strong)', color: isActive ? '#fff' : 'var(--color-ink)' }}
-                  >
-                    <span className="mr-2 size-2 shrink-0 rounded-full" style={{ background: isActive ? '#fff' : color }} />
-                    <span className="flex-1 truncate text-[12px]">
-                      <strong>{r.stepLabel}</strong>: {r.isExternal ? r.email : r.username}
-                      {r.isExternal && <span className="ml-1 text-[9.5px] font-bold" style={{ color: isActive ? '#fff' : VIOLET_HEX }}>EXT</span>}
-                    </span>
-                    <span className="shrink-0 text-[11px] opacity-80">
-                      {placedAll ? (
-                        <span className="flex items-center gap-1">
-                          <Check size={12} /> all
-                        </span>
-                      ) : placedHere ? (
-                        <span className="flex items-center gap-1">
-                          <Check size={12} /> here
-                        </span>
-                      ) : (
-                        <Circle size={12} />
-                      )}
-                    </span>
-                  </button>
+                  </RoutingNode>
                 );
               })}
+              <button
+                onClick={() => setCustomSigs((list) => [...list, { label: '', username: '', isExternal: false }])}
+                className="flex items-center gap-1.5 pl-9 text-[11.5px] font-semibold text-seal"
+              >
+                <Plus size={12} /> Add signatory
+              </button>
 
               {includeApprover && (
-                <div className="mt-2.5 border-t border-line pt-2.5">
-                  <div className="mb-1.5 text-[11px] font-bold tracking-wide text-slate uppercase">Optional</div>
+                <div className="mt-3 border-t border-line pt-3 pl-9">
                   {(() => {
                     const isActive = activeRecipient === '__EFFDATE__';
                     const placedHere = effDateBoxes.some((b) => b.docIndex === previewDocIdx);
                     return (
                       <button
                         onClick={() => setActiveRecipient('__EFFDATE__')}
-                        className="flex w-full items-center rounded-md border px-2.5 py-1.5 text-left"
-                        style={{ background: isActive ? VIOLET_HEX : 'var(--color-paper-raised)', borderColor: isActive ? VIOLET_HEX : 'var(--color-line-strong)', color: isActive ? '#fff' : 'var(--color-ink)' }}
+                        className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-[11.5px]"
+                        style={{ borderColor: isActive ? VIOLET_HEX : 'var(--color-line-strong)', background: isActive ? `${VIOLET_HEX}15` : undefined }}
                       >
-                        <span className="mr-2 size-2 shrink-0 rounded-full" style={{ background: isActive ? '#fff' : VIOLET_HEX }} />
-                        <span className="flex-1 text-[12px]">Effective Date box</span>
-                        <span className="text-[11px] opacity-80">{placedHere ? <Check size={12} /> : <Circle size={12} />}</span>
+                        <span className="size-2 shrink-0 rounded-full" style={{ background: VIOLET_HEX }} />
+                        Effective Date box <span className="text-slate">(optional)</span>
+                        <span className="ml-auto">{placedHere ? <Check size={12} className="text-success" /> : <Circle size={12} className="text-slate" />}</span>
                       </button>
                     );
                   })()}
-                  <div className="mt-1.5 text-[11px] leading-relaxed text-slate">Approver fills in the date at approval time.</div>
                 </div>
               )}
+            </Section>
 
-              <div className="mt-2.5 rounded-md bg-paper px-2.5 py-2 text-[11px] leading-relaxed text-slate">
-                Every recipient needs a box on every document.
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* STEP 4: Author sign & send */}
-        {step === 4 && (
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-            <div>
-              <div className="mb-2 text-[12px] font-bold tracking-wide text-slate uppercase">Document Summary</div>
-              <div className="rounded-md border border-line bg-paper px-3.5 py-3 text-[13px] leading-loose">
-                <div>
-                  <span className="text-slate">Title:</span> <strong>{title}</strong>
-                </div>
-                <div>
-                  <span className="text-slate">Routing:</span> {routingType === 'sequential' ? 'Sequential' : 'Parallel'}
-                </div>
-                <div>
-                  <span className="text-slate">Documents:</span> {files.map((f, i) => `${f.name} (No. ${docNumbers[i] || '—'})`).join(', ')}
-                </div>
-                <div className="mt-2 border-t border-line pt-2">
-                  <div className="mb-1 text-[11px] font-bold tracking-wide text-slate uppercase">Workflow</div>
-                  {allRecipients.map((r, i) => {
-                    const color = STEP_DEFS[r.stepLabel]?.color || stepColor(r.stepLabel);
-                    return (
-                      <div key={i} className="mb-1 flex items-center gap-2">
-                        <span className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
-                        <span className="text-[12px] font-semibold" style={{ color }}>
-                          {r.stepLabel}:
-                        </span>
-                        <span className="text-[12px]">{r.isExternal ? r.email : r.username}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {effDateBoxes.length > 0 && (
-                  <div className="mt-2 border-t border-line pt-2 text-[12px]">
-                    <span className="font-semibold text-violet">Effective Date boxes: </span>
-                    {files.map((f, i) => {
-                      const has = effDateBoxes.some((b) => b.docIndex === i);
-                      return (
-                        <span key={i} className="mr-2">
-                          {f.name.slice(0, 16)}: {has ? <Check size={12} className="inline align-middle" /> : '—'}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-3 rounded-md bg-seal-soft px-3 py-3 text-[12px] leading-relaxed text-seal">
-                <strong>Your role: Author</strong>
-                <br />
-                {SIGNING_MEANING.Author}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-3 flex flex-col gap-1.5">
-                <Label>Your signature *</Label>
-                <div className="mb-1 text-[11.5px] text-slate">
-                  Your signature is a typed signature using your registered account name. Every signer on this document signs the
-                  same way.
-                </div>
+            <Section
+              title="Your signature"
+              defaultOpen={placementComplete}
+              badge={authorSigData && esigPassword ? <Check size={14} className="text-success" /> : undefined}
+            >
+              <div className="mb-2.5 rounded-md bg-seal-soft px-2.5 py-2 text-[11.5px] leading-relaxed text-seal">{SIGNING_MEANING.Author}</div>
+              <div className="mb-2.5 flex flex-col gap-1.5">
+                <Label>Signature</Label>
                 <ErrorBoundary label="Signature pad">
                   <SignaturePad onChange={setAuthorSigData} signerName={currentUser.fullName || currentUser.username} />
                 </ErrorBoundary>
               </div>
-              <div className="mb-3 flex flex-col gap-1.5">
+              <div className="mb-2.5 flex flex-col gap-1.5">
                 <Label>
                   Comment <span className="font-normal text-slate">(optional)</span>
                 </Label>
@@ -795,42 +685,29 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Your password (e-signature confirmation) *</Label>
-                <Input
-                  type="password"
-                  autoFocus
-                  value={esigPassword}
-                  onChange={(e) => setEsigPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && step3Valid() && handleSubmit()}
-                />
+                <Label>Password *</Label>
+                <Input type="password" value={esigPassword} onChange={(e) => setEsigPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && blockers.length === 0 && handleSubmit()} />
               </div>
-            </div>
+            </Section>
           </div>
-        )}
+        </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          {step > 1 && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setErr('');
-                setStep((s) => s - 1);
-              }}
-              disabled={busy}
-            >
-              <ArrowLeft size={13} /> Back
-            </Button>
+        {/* Persistent action bar — readiness shown continuously, not a
+            per-step gate. */}
+        <div className="flex items-center gap-3 border-t border-line px-5 py-3">
+          {err && <div className="text-[12.5px] text-danger">{err}</div>}
+          {!err && blockers.length > 0 && (
+            <div className="flex min-w-0 items-center gap-1.5 truncate text-[12px] text-slate">
+              <ArrowDown size={12} className="shrink-0 -rotate-90" />
+              {blockers[0]}
+              {blockers.length > 1 && <span className="shrink-0 text-slate/70"> · {blockers.length - 1} more</span>}
+            </div>
           )}
-          {step < 4 && (
-            <Button onClick={goNext}>
-              Next <ArrowRight size={14} />
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              Cancel
             </Button>
-          )}
-          {step === 4 && (
-            <Button onClick={handleSubmit} disabled={busy || !step3Valid()}>
+            <Button onClick={handleSubmit} disabled={busy || blockers.length > 0}>
               {busy ? (
                 'Signing & sending…'
               ) : (
@@ -839,8 +716,8 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
                 </>
               )}
             </Button>
-          )}
-        </DialogFooter>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
