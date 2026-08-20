@@ -5,7 +5,7 @@ import { ROLE_HEX, AUDIT_EVENT_TONE, AUDIT_EVENT_COLOR, ACTION_HEX, colorForLabe
 export { ROLE_HEX as ROLE_COLORS, ACTION_HEX as CHANGE_ACTION_COLOR, AUDIT_EVENT_COLOR };
 
 export const STEP_DEFS: Record<string, { color: string; allowedRoles: string[] }> = {
-  Author: { color: '#0f6e5c', allowedRoles: ['Author'] },
+  Author: { color: '#4f46e5', allowedRoles: ['Author'] },
   Reviewer: { color: '#b45309', allowedRoles: ['Reviewer'] },
   Approver: { color: '#15803d', allowedRoles: ['Approver'] },
 };
