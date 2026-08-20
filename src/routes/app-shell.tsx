@@ -31,7 +31,7 @@ export function AppShell() {
   if (needsSiteSelection) return <SiteSelectGate />;
 
   return (
-    <div className="flex min-h-screen bg-paper lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-paper lg:flex-row">
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-paper-raised px-3 py-2.5 lg:hidden">
         <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
           <Menu size={20} />
