@@ -18,6 +18,7 @@ export interface AccessGrant {
 
 export interface PrivilegeSet {
   role: string;
+  isSystemRole: boolean;
   description: string;
   color: string;
   sections: string[];
