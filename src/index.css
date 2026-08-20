@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+/* Self-hosted (npm, not a CDN) — this is a validated internal system, it
+   should not depend on a third-party font host being reachable. Latin
+   subset only: the default import pulls every unicode range (cyrillic,
+   greek, etc.) which is pure dead weight for this app's audience. */
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-sans/latin-700.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+
+/* ────────────────────────────────────────────────────────────────────────
+   Design system — "audit-grade precision"
+   Subject: a 21 CFR Part 11 electronic-signature / audit-trail system for a
+   pharmaceutical company. The people using it are QA, regulatory affairs,
+   and document signatories — the tone is a controlled record, not a SaaS
+   dashboard. Cool paper background (not the warm-cream AI default), a
+   confident deep-teal accent for action/trust, IBM Plex Sans for UI text
+   and IBM Plex Mono specifically for record data (IDs, hashes, timestamps)
+   so the eye can tell "interface" from "recorded fact" at a glance. The one
+   deliberate flourish: a rotated ink-stamp seal badge for anything that has
+   actually been e-signed — used nowhere else.
+   ──────────────────────────────────────────────────────────────────────── */
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  /* Core palette */
+  --color-paper: #f7f8fa;      /* app background — cool, not cream */
+  --color-paper-raised: #ffffff;
+  --color-ink: #12181f;        /* primary text */
+  --color-ink-soft: #3d4a58;   /* secondary text */
+  --color-slate: #5b6b7a;      /* muted text, placeholders */
+  --color-line: #e2e6eb;       /* hairline borders/dividers */
+  --color-line-strong: #c7ced6;
+
+  /* Brand / action */
+  --color-seal: #0f6e5c;       /* primary action, links, focus */
+  --color-seal-hover: #0b5749;
+  --color-seal-soft: #e6f2ef;  /* tinted backgrounds */
+  --color-seal-ring: #0f6e5c33;
+
+  /* The one bold accent — reserved for e-signature / "sealed" states only */
+  --color-stamp: #8a2e2e;
+  --color-stamp-soft: #f7e9e8;
+
+  /* Semantic status (desaturated to stay in the restrained palette) */
+  --color-success: #15803d;
+  --color-success-soft: #e8f5ec;
+  --color-warning: #b45309;
+  --color-warning-soft: #fbf1e4;
+  --color-danger: #c0362c;
+  --color-danger-soft: #fbeceb;
+  --color-info: #2563a8;
+  --color-info-soft: #e9f1fa;
+  /* Sixth tone, alongside success/warning/danger/info — "administrative /
+     structural" audit events (role & privilege changes, settings edits),
+     external-signer indicators, and effective-date stamps. Previously
+     three different hex values for the same concept across three files
+     (#7c3aed / #7c4dc4 / #8b5cf6) — one token now. */
+  --color-violet: #7c3aed;
+  --color-violet-soft: #f3eefd;
+
+  /* Role colors — a real qualitative palette; roles must stay
+     distinguishable from each other, not reducible to the tones above. */
+  --color-role-author: #f2811b;
+  --color-role-reviewer: #b9770d;
+  --color-role-approver: #0a8f5b;
+  --color-role-site-admin: #0d9488;
+  --color-role-it-admin: #dc2626;
+  --color-role-administrator: #6d28d9;
+
+  /* Qualitative chart series palette — pie/bar/line charts, cycled by index. */
+  --chart-1: #f2811b;
+  --chart-2: #b9770d;
+  --chart-3: #7c3aed;
+  --chart-4: #0a8f5b;
+  --chart-5: #d23b3b;
+  --chart-6: #0891b2;
+
+  /* Deterministic per-label palette — custom signatory capacities (HOD,
+     SAP SME, etc.) and PDF-placement recipient boxes get a stable color
+     derived from their label, so the same label always renders the same
+     way across the wizard, placement, and view screens. */
+  --label-1: #7c3aed;
+  --label-2: #0e7490;
+  --label-3: #b45309;
+  --label-4: #be185d;
+  --label-5: #4d7c0f;
+  --label-6: #6d28d9;
+  --label-7: #0369a1;
+  --label-8: #a21caf;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(18 24 31 / 0.04), 0 1px 3px 0 rgb(18 24 31 / 0.06);
+  --shadow-popover: 0 4px 6px -1px rgb(18 24 31 / 0.08), 0 10px 24px -6px rgb(18 24 31 / 0.12);
+  --shadow-modal: 0 20px 60px -12px rgb(18 24 31 / 0.35);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv05", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Visible keyboard focus everywhere, no exceptions — this app is used by
+     auditors and reviewers who tab through forms constantly. */
+  :focus-visible {
+    outline: 2px solid var(--color-seal);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  ::selection {
+    background: var(--color-seal-soft);
+    color: var(--color-ink);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Record-data typography — audit IDs, hashes, timestamps, envelope
+     numbers. Distinguishes "recorded fact" from "interface chrome" at a
+     glance, which is the whole point of a mono face in this design. */
+  .font-record {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum";
+    letter-spacing: -0.01em;
+  }
+
+  /* The signature element: a rotated ink-stamp seal, used only where an
+     e-signature has genuinely been applied. Nowhere else in the UI. */
+  .seal-stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border: 1.5px solid var(--color-stamp);
+    color: var(--color-stamp);
+    background: var(--color-stamp-soft);
+    border-radius: 9999px;
+    padding: 0.1875rem 0.625rem 0.1875rem 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    transform: rotate(-2deg);
+  }
+}
