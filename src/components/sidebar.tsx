@@ -16,6 +16,8 @@ import {
   KeyRound,
   Power,
   ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useSession } from '@/features/auth/session-context';
 import { getActiveSiteLabel } from '@/lib/session';
@@ -54,8 +56,6 @@ const ALL_ITEMS: NavItem[] = [
     icon: <CheckSquare />,
     qaOrAdmin: true,
   },
-  // The privilege matrix page itself renders read-only for non-Administrators;
-  // editing stays with the Administrator. Site Admin intentionally excluded.
   {
     id: 'privileges',
     to: '/app/privileges',
@@ -67,10 +67,6 @@ const ALL_ITEMS: NavItem[] = [
   { id: 'settings', to: '/app/settings', label: 'Settings', icon: <SettingsIcon />, adminOnly: true },
 ];
 
-// Icon identity is fixed per item regardless of navigation state — a
-// consistent colored chip so items are recognizable at a glance, the way
-// Notion/Linear-style sidebars do it. The row highlight (active page) is
-// layered on top of this separately, using the app's primary accent.
 const NAV_ICON_STYLE: Record<string, { bg: string; fg: string }> = {
   dashboard: { bg: '#dbeafe', fg: '#2563eb' },
   signatures: { bg: '#ede9fe', fg: '#7c3aed' },
@@ -107,13 +103,26 @@ function canSee(item: NavItem, user: SessionUser | null): boolean {
   return !!privs[item.requires];
 }
 
-const COLLAPSE_KEY = 'eres.sidebar.collapsedSections';
-function loadCollapsed(): Record<string, boolean> {
+const SECTION_COLLAPSE_KEY = 'eres.sidebar.collapsedSections';
+function loadSectionCollapse(): Record<string, boolean> {
   try {
-    const raw = window.localStorage.getItem(COLLAPSE_KEY);
+    const raw = window.localStorage.getItem(SECTION_COLLAPSE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
+  }
+}
+
+// Whole-sidebar icon-only mode — separate from per-section collapse above.
+// Desktop only: on mobile the sidebar is an overlay drawer that only
+// exists while open, so shrinking it to icon-only doesn't reclaim any
+// layout space and just makes it harder to tap the right item.
+const RAIL_COLLAPSE_KEY = 'eres.sidebar.collapsedRail';
+function loadRailCollapse(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -125,13 +134,25 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, activeSite, logout } = useSession();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
+  const [sectionCollapsed, setSectionCollapsed] = useState<Record<string, boolean>>(loadSectionCollapse);
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(loadRailCollapse);
 
   function toggleSection(section: string) {
-    setCollapsed((prev) => {
+    setSectionCollapsed((prev) => {
       const next = { ...prev, [section]: !prev[section] };
       try {
-        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(SECTION_COLLAPSE_KEY, JSON.stringify(next));
+      } catch {
+        /* localStorage unavailable — collapse state just won't persist */
+      }
+      return next;
+    });
+  }
+  function toggleRail() {
+    setRailCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(RAIL_COLLAPSE_KEY, next ? '1' : '0');
       } catch {
         /* localStorage unavailable — collapse state just won't persist */
       }
@@ -162,17 +183,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     const between = nextSectionIdx === -1 ? next : next.slice(0, nextSectionIdx);
     return between.some((x) => x.id);
   });
+  const groups: { section: string; items: NavItem[] }[] = [];
+  clean.forEach((item) => {
+    if (item.section) groups.push({ section: item.section, items: [] });
+    else groups[groups.length - 1]?.items.push(item);
+  });
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed inset-0 z-40 bg-ink/40 lg:hidden" onClick={onClose} aria-hidden="true" />
-      )}
+      {isOpen && <div className="fixed inset-0 z-40 bg-ink/40 lg:hidden" onClick={onClose} aria-hidden="true" />}
       <nav
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-paper-raised transition-transform',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-paper-raised transition-[transform,width]',
           'lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
           isOpen ? 'translate-x-0' : '-translate-x-full',
+          railCollapsed && 'lg:w-[72px]',
         )}
       >
         <button
@@ -183,79 +208,85 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <X size={18} />
         </button>
 
-        <div className="flex flex-col gap-1 border-b border-line px-5 py-5">
-          <div className="text-[10px] font-semibold tracking-widest text-seal uppercase">
+        <button
+          onClick={toggleRail}
+          title={railCollapsed ? 'Expand menu' : 'Collapse menu'}
+          className="absolute top-6 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border border-line bg-paper-raised text-slate shadow-card hover:text-ink lg:flex"
+        >
+          {railCollapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+        </button>
+
+        <div className={cn('flex flex-col gap-1 border-b border-line px-5 py-5', railCollapsed && 'lg:items-center lg:px-0')}>
+          <div className={cn('text-[10px] font-semibold tracking-widest text-seal uppercase', railCollapsed && 'lg:hidden')}>
             Electronic Signature System
           </div>
-          <div className="flex items-center gap-2 text-lg font-semibold text-ink">
-            <span className="flex size-7 items-center justify-center rounded-md bg-seal text-white">
+          <div className={cn('flex items-center gap-2 text-lg font-semibold text-ink', railCollapsed && 'lg:gap-0')}>
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-seal text-white">
               <ShieldCheck size={16} />
             </span>
-            QMDocs
+            <span className={cn(railCollapsed && 'lg:hidden')}>QMDocs</span>
           </div>
-          <div className="font-record text-[11px] text-slate">QMDocs · v2.0.0</div>
+          <div className={cn('font-record text-[11px] text-slate', railCollapsed && 'lg:hidden')}>QMDocs · v2.0.0</div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2.5 py-3">
-          {(() => {
-            // Group flat list into { section, items }[] so each section's
-            // items can be shown/hidden as a unit under its header.
-            const groups: { section: string; items: NavItem[] }[] = [];
-            clean.forEach((item) => {
-              if (item.section) groups.push({ section: item.section, items: [] });
-              else groups[groups.length - 1]?.items.push(item);
-            });
-            return groups.map((g) => {
-              const isCollapsed = !!collapsed[g.section];
-              return (
-                <div key={g.section} className="mb-1">
-                  <button
-                    onClick={() => toggleSection(g.section)}
-                    className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-[10.5px] font-semibold tracking-widest text-slate uppercase hover:text-ink-soft"
-                  >
-                    {g.section}
-                    <ChevronDown size={13} className={cn('transition-transform', isCollapsed && '-rotate-90')} />
-                  </button>
-                  {!isCollapsed && (
-                    <div className="flex flex-col gap-0.5">
-                      {g.items.map((item) => {
-                        const style = NAV_ICON_STYLE[item.id || ''] || { bg: '#f1f5f9', fg: '#475569' };
-                        const active = pathname.startsWith(item.to || '\0');
-                        return (
-                          <Link
-                            key={item.id}
-                            to={item.to}
-                            onClick={onClose}
-                            className={cn(
-                              'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium text-ink-soft transition-colors [&_svg]:size-[15px]',
-                              'hover:bg-paper hover:text-ink',
-                              active && 'bg-seal-soft text-seal hover:bg-seal-soft hover:text-seal',
-                            )}
-                          >
-                            <span
-                              className="flex size-7 shrink-0 items-center justify-center rounded-md"
-                              style={{ background: style.bg, color: style.fg }}
-                            >
-                              {item.icon}
-                            </span>
-                            {item.label}
-                          </Link>
-                        );
-                      })}
-                    </div>
+        <div className={cn('flex-1 overflow-y-auto px-2.5 py-3', railCollapsed && 'lg:px-2')}>
+          {groups.map((g) => {
+            const isCollapsed = !!sectionCollapsed[g.section];
+            return (
+              <div key={g.section} className="mb-1">
+                <button
+                  onClick={() => toggleSection(g.section)}
+                  className={cn(
+                    'flex w-full items-center justify-between rounded px-2.5 py-1.5 text-[10.5px] font-semibold tracking-widest text-slate uppercase hover:text-ink-soft',
+                    railCollapsed && 'lg:hidden',
                   )}
-                </div>
-              );
-            });
-          })()}
+                >
+                  {g.section}
+                  <ChevronDown size={13} className={cn('transition-transform', isCollapsed && '-rotate-90')} />
+                </button>
+                {railCollapsed && <div className="mx-2 my-2 hidden border-t border-line lg:block first:hidden" />}
+
+                {(!isCollapsed || railCollapsed) && (
+                  <div className="flex flex-col gap-0.5">
+                    {g.items.map((item) => {
+                      const style = NAV_ICON_STYLE[item.id || ''] || { bg: '#f1f5f9', fg: '#475569' };
+                      const active = pathname.startsWith(item.to || '\0');
+                      return (
+                        <Link
+                          key={item.id}
+                          to={item.to}
+                          onClick={onClose}
+                          title={railCollapsed ? item.label : undefined}
+                          className={cn(
+                            'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium text-ink-soft transition-colors [&_svg]:size-[15px]',
+                            'hover:bg-paper hover:text-ink',
+                            active && 'bg-seal-soft text-seal hover:bg-seal-soft hover:text-seal',
+                            railCollapsed && 'lg:justify-center lg:px-0',
+                          )}
+                        >
+                          <span
+                            className="flex size-7 shrink-0 items-center justify-center rounded-md"
+                            style={{ background: style.bg, color: style.fg }}
+                          >
+                            {item.icon}
+                          </span>
+                          <span className={cn(railCollapsed && 'lg:hidden')}>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <div className="flex flex-col gap-2.5 border-t border-line px-3 py-4">
-          <div className="flex items-center gap-2.5 rounded-md px-1.5 py-1">
+        <div className={cn('flex flex-col gap-2.5 border-t border-line px-3 py-4', railCollapsed && 'lg:items-center lg:px-2')}>
+          <div className={cn('flex items-center gap-2.5 rounded-md px-1.5 py-1', railCollapsed && 'lg:px-0')}>
             <Avatar>
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
+            <div className={cn('min-w-0', railCollapsed && 'lg:hidden')}>
               <div className="truncate text-[13px] font-semibold text-ink">{displayName}</div>
               <div className="truncate text-[11.5px] text-slate">{displayRole}</div>
               {activeSiteLabel && (
@@ -265,18 +296,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               )}
             </div>
           </div>
-          <Button variant="secondary" size="sm" className="justify-start" asChild>
-            <Link to="/app/settings">
-              <KeyRound size={15} /> Change Password
+          <Button variant="secondary" size="sm" className={cn('justify-start', railCollapsed && 'lg:justify-center lg:px-0')} asChild>
+            <Link to="/app/settings" title={railCollapsed ? 'Change Password' : undefined}>
+              <KeyRound size={15} /> <span className={cn(railCollapsed && 'lg:hidden')}>Change Password</span>
             </Link>
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="justify-start border-danger/30 text-danger hover:bg-danger-soft"
+            className={cn('justify-start border-danger/30 text-danger hover:bg-danger-soft', railCollapsed && 'lg:justify-center lg:px-0')}
+            title={railCollapsed ? 'Sign Out' : undefined}
             onClick={() => logout()}
           >
-            <Power size={15} /> Sign Out
+            <Power size={15} /> <span className={cn(railCollapsed && 'lg:hidden')}>Sign Out</span>
           </Button>
         </div>
       </nav>
