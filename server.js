@@ -35,11 +35,22 @@ http
     let filePath = path.join(DIST, urlPath === '/' ? 'index.html' : urlPath);
     const ext = path.extname(filePath);
 
-    // SPA fallback: any path that isn't a real built asset (a client-side
-    // route like /app/signatures, or the /external/sign/:token page) gets
-    // index.html so TanStack Router can take over and resolve it.
-    if (!ext || !fs.existsSync(filePath)) {
+    // SPA fallback: only for paths with NO extension — real client-side
+    // routes like /app/dashboard or /external/sign/:token, which don't
+    // correspond to a file on disk and need index.html so TanStack Router
+    // can take over. A path WITH an extension that's missing (e.g. a
+    // content-hashed chunk from a build that's since been replaced by a
+    // redeploy) is a genuinely missing asset and must 404 — silently
+    // serving index.html for it makes the browser reject the response
+    // ("Expected a JavaScript module but the server responded with
+    // text/html") instead of surfacing a clean, recoverable 404 that the
+    // app's own stale-chunk handling can act on.
+    if (!ext) {
       filePath = path.join(DIST, 'index.html');
+    } else if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+      res.end('Not found');
+      return;
     }
 
     const contentType = MIME[path.extname(filePath)] || 'application/octet-stream';
