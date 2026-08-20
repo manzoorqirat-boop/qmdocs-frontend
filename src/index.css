@@ -38,10 +38,10 @@
   --color-line-strong: #c7ced6;
 
   /* Brand / action */
-  --color-seal: #0f6e5c;       /* primary action, links, focus */
-  --color-seal-hover: #0b5749;
-  --color-seal-soft: #e6f2ef;  /* tinted backgrounds */
-  --color-seal-ring: #0f6e5c33;
+  --color-seal: #4f46e5;       /* primary action, links, focus */
+  --color-seal-hover: #4338ca;
+  --color-seal-soft: #eef2ff;  /* tinted backgrounds */
+  --color-seal-ring: #4f46e533;
 
   /* The one bold accent — reserved for e-signature / "sealed" states only */
   --color-stamp: #8a2e2e;
