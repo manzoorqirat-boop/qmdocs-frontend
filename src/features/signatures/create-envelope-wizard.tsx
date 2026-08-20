@@ -364,10 +364,10 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
           <DialogTitle>New Document</DialogTitle>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {/* Document canvas — always visible once a file exists, never
               hidden behind a step. */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-paper">
+          <div className="flex min-h-[320px] min-w-0 flex-1 flex-col overflow-hidden bg-paper lg:min-h-0">
             {files.length === 0 ? (
               <div
                 onDrop={(e) => {
@@ -426,7 +426,7 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
 
           {/* Persistent rail — every section independently open, nothing
               gated behind finishing another one first. */}
-          <div className="flex w-[400px] shrink-0 flex-col overflow-y-auto border-l border-line">
+          <div className="flex w-full shrink-0 flex-col overflow-y-auto border-t border-line lg:w-[400px] lg:border-t-0 lg:border-l">
             <Section title="Document" defaultOpen={files.length === 0} badge={title.trim() && files.length > 0 ? <Check size={14} className="text-success" /> : undefined}>
               <div className="mb-2.5 flex flex-col gap-1.5">
                 <Label>Title *</Label>
