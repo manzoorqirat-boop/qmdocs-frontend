@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import {
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
   MapPin,
   KeyRound,
   Power,
+  ChevronDown,
 } from 'lucide-react';
 import { useSession } from '@/features/auth/session-context';
 import { getActiveSiteLabel } from '@/lib/session';
@@ -65,6 +67,23 @@ const ALL_ITEMS: NavItem[] = [
   { id: 'settings', to: '/app/settings', label: 'Settings', icon: <SettingsIcon />, adminOnly: true },
 ];
 
+// Icon identity is fixed per item regardless of navigation state — a
+// consistent colored chip so items are recognizable at a glance, the way
+// Notion/Linear-style sidebars do it. The row highlight (active page) is
+// layered on top of this separately, using the app's primary accent.
+const NAV_ICON_STYLE: Record<string, { bg: string; fg: string }> = {
+  dashboard: { bg: '#dbeafe', fg: '#2563eb' },
+  signatures: { bg: '#ede9fe', fg: '#7c3aed' },
+  audit: { bg: '#fef3c7', fg: '#d97706' },
+  reports: { bg: '#cffafe', fg: '#0891b2' },
+  users: { bg: '#fce7f3', fg: '#db2777' },
+  sites: { bg: '#ccfbf1', fg: '#0d9488' },
+  departments: { bg: '#e0e7ff', fg: '#4f46e5' },
+  'change-requests': { bg: '#ffedd5', fg: '#ea580c' },
+  privileges: { bg: '#fee2e2', fg: '#dc2626' },
+  settings: { bg: '#f1f5f9', fg: '#475569' },
+};
+
 const DEFAULT_PRIVS_BY_ROLE: Record<string, Partial<PrivilegeSet>> = {
   Administrator: { canViewAudit: true, canViewUsers: true, canViewReports: true, canEditSettings: true },
   'IT Admin': { canViewAudit: true, canViewUsers: true, canViewReports: true, canEditSettings: true },
@@ -88,6 +107,16 @@ function canSee(item: NavItem, user: SessionUser | null): boolean {
   return !!privs[item.requires];
 }
 
+const COLLAPSE_KEY = 'eres.sidebar.collapsedSections';
+function loadCollapsed(): Record<string, boolean> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -96,6 +125,19 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, activeSite, logout } = useSession();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
+
+  function toggleSection(section: string) {
+    setCollapsed((prev) => {
+      const next = { ...prev, [section]: !prev[section] };
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+      } catch {
+        /* localStorage unavailable — collapse state just won't persist */
+      }
+      return next;
+    });
+  }
 
   const displayName = user?.fullName || user?.username || 'User';
   const displayRole = user?.role || '—';
@@ -155,30 +197,57 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-2.5 py-3">
-          {clean.map((item, i) =>
-            item.section ? (
-              <div
-                key={`s-${i}`}
-                className="mt-4 mb-1.5 px-2.5 text-[10.5px] font-semibold tracking-widest text-slate uppercase first:mt-0"
-              >
-                {item.section}
-              </div>
-            ) : (
-              <Link
-                key={item.id}
-                to={item.to}
-                onClick={onClose}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium text-ink-soft transition-colors [&_svg]:size-[18px]',
-                  'hover:bg-paper hover:text-ink',
-                  pathname.startsWith(item.to || '\0') && 'bg-seal-soft text-seal hover:bg-seal-soft hover:text-seal',
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            ),
-          )}
+          {(() => {
+            // Group flat list into { section, items }[] so each section's
+            // items can be shown/hidden as a unit under its header.
+            const groups: { section: string; items: NavItem[] }[] = [];
+            clean.forEach((item) => {
+              if (item.section) groups.push({ section: item.section, items: [] });
+              else groups[groups.length - 1]?.items.push(item);
+            });
+            return groups.map((g) => {
+              const isCollapsed = !!collapsed[g.section];
+              return (
+                <div key={g.section} className="mb-1">
+                  <button
+                    onClick={() => toggleSection(g.section)}
+                    className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-[10.5px] font-semibold tracking-widest text-slate uppercase hover:text-ink-soft"
+                  >
+                    {g.section}
+                    <ChevronDown size={13} className={cn('transition-transform', isCollapsed && '-rotate-90')} />
+                  </button>
+                  {!isCollapsed && (
+                    <div className="flex flex-col gap-0.5">
+                      {g.items.map((item) => {
+                        const style = NAV_ICON_STYLE[item.id || ''] || { bg: '#f1f5f9', fg: '#475569' };
+                        const active = pathname.startsWith(item.to || '\0');
+                        return (
+                          <Link
+                            key={item.id}
+                            to={item.to}
+                            onClick={onClose}
+                            className={cn(
+                              'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium text-ink-soft transition-colors [&_svg]:size-[15px]',
+                              'hover:bg-paper hover:text-ink',
+                              active && 'bg-seal-soft text-seal hover:bg-seal-soft hover:text-seal',
+                            )}
+                          >
+                            <span
+                              className="flex size-7 shrink-0 items-center justify-center rounded-md"
+                              style={{ background: style.bg, color: style.fg }}
+                            >
+                              {item.icon}
+                            </span>
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <div className="flex flex-col gap-2.5 border-t border-line px-3 py-4">
