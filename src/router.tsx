@@ -10,6 +10,7 @@ import { LoginPage } from '@/pages/login';
 // in — recharts, pdfjs-dist, exceljs) only downloads when that route is
 // actually visited, not as part of the initial app load.
 const ExternalSignPage = lazy(() => import('@/pages/external-sign').then((m) => ({ default: m.ExternalSignPage })));
+const VerifyPage = lazy(() => import('@/pages/verify').then((m) => ({ default: m.VerifyPage })));
 const DashboardPage = lazy(() => import('@/pages/dashboard').then((m) => ({ default: m.DashboardPage })));
 const SignaturesPage = lazy(() => import('@/pages/signatures').then((m) => ({ default: m.SignaturesPage })));
 const AuditTrailPage = lazy(() => import('@/pages/audit-trail').then((m) => ({ default: m.AuditTrailPage })));
@@ -64,6 +65,14 @@ const externalSignRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/external/sign/$token',
   component: withSuspense(ExternalSignPage),
+});
+
+// Standalone, same reasoning as externalSignRoute above — whoever holds a printed page has
+// no account either, so this never touches the authenticated shell.
+const verifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/external/verify/$code',
+  component: withSuspense(VerifyPage),
 });
 
 // Layout route: everything under here requires a session. beforeLoad reads
@@ -161,6 +170,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   externalSignRoute,
+  verifyRoute,
   authenticatedRoute.addChildren([appRouteTree]),
 ]);
 
