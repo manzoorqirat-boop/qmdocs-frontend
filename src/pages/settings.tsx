@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { useSession } from '@/features/auth/session-context';
 import { useDepartments } from '@/features/departments/hooks';
 import {
@@ -207,7 +208,23 @@ export function SettingsPage() {
       confirmLabel: 'Save & Sign',
       run: async (password) => {
         const payload = sectionPayload(section);
-        await saveSettings.mutateAsync({ adminUsername: user!.username, adminPassword: password, settings: payload });
+        const result = await saveSettings.mutateAsync({ adminUsername: user!.username, adminPassword: password, settings: payload });
+
+        // Three of these six sections (Signing Meanings, QA Department, Print/Download
+        // Departments) are business master data under maker-checker: saving them stages a
+        // change request for QA approval rather than applying it immediately. That request
+        // still succeeds at the HTTP level (202, not an error) — so without this check, the
+        // button would show the same "✓ Saved" it shows for an immediately-applied section,
+        // and the very next page refresh would correctly show the *old* value, since nothing
+        // was actually applied yet. That looked exactly like a broken save, because from the
+        // user's side it was indistinguishable from one.
+        if ('pending' in result && result.pending) {
+          toast.info(result.message, {
+            description: 'This change has not taken effect yet — it needs QA approval first.',
+          });
+          return;
+        }
+
         setSavedSection(section);
         setTimeout(() => setSavedSection(''), 3000);
       },
