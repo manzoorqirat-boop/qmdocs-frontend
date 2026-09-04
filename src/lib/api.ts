@@ -279,7 +279,11 @@ export const api = {
 
   // ── Settings ───────────────────────────────────────────
   getSettings: () => request<{ key: string; value: string; updatedBy?: string; updatedAt?: string }[]>('GET', '/api/settings'),
-  saveSettings: (body: Record<string, unknown>) => request<{ message: string; updated: string[] }>('POST', '/api/settings', body),
+  saveSettings: (body: Record<string, unknown>) =>
+    request<
+      | { message: string; updated: string[] }
+      | { pending: true; message: string; changeRequestId: string }
+    >('POST', '/api/settings', body),
   // The reminder schedule has its OWN dedicated endpoints — it is NOT part
   // of the generic settings key/value list (there is no "reminderConfig"
   // key server-side; it's three separate keys assembled into this shape).
