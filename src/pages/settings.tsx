@@ -46,7 +46,7 @@ const SECTIONS: Record<string, string> = {
   makerChecker: 'Dual Approval (Maker-Checker)',
 };
 const SECURITY_KEYS = ['minPasswordLength', 'passwordExpiry', 'passwordHistory', 'maxFailedAttempts', 'lockoutDuration', 'sessionTimeout', 'systemVersion'];
-const EMAIL_KEYS = ['emailEnabled', 'smtpHost', 'smtpPort', 'gmailUser', 'gmailPass', 'fromEmail', 'fromName'];
+const EMAIL_KEYS = ['emailEnabled', 'fromEmail', 'fromName'];
 
 // Sectioned nav instead of one long scroll of 9+ stacked cards — the
 // standard pattern for an admin settings page with this many distinct
@@ -512,13 +512,14 @@ export function SettingsPage() {
             <CardContent>
               <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
                 <Field label="Email Notifications (Yes/No)" placeholder="Yes" value={settings.emailEnabled ?? ''} onChange={(v) => setSettings((s) => ({ ...s, emailEnabled: v }))} disabled={!isSuperAdmin} />
-                <Field label="SMTP Host" placeholder="smtp.gmail.com" value={settings.smtpHost ?? ''} onChange={(v) => setSettings((s) => ({ ...s, smtpHost: v }))} disabled={!isSuperAdmin} />
-                <Field label="SMTP Port" type="number" placeholder="587" value={settings.smtpPort ?? ''} onChange={(v) => setSettings((s) => ({ ...s, smtpPort: v }))} disabled={!isSuperAdmin} />
-                <Field label="Gmail Address / SMTP User" type="email" value={settings.gmailUser ?? ''} onChange={(v) => setSettings((s) => ({ ...s, gmailUser: v }))} disabled={!isSuperAdmin} />
-                <Field label="Gmail App Password" type="password" value={settings.gmailPass ?? ''} onChange={(v) => setSettings((s) => ({ ...s, gmailPass: v }))} disabled={!isSuperAdmin} />
                 <Field label="From Email Address" type="email" value={settings.fromEmail ?? ''} onChange={(v) => setSettings((s) => ({ ...s, fromEmail: v }))} disabled={!isSuperAdmin} />
                 <Field label="From Name" placeholder="QMDocs" value={settings.fromName ?? ''} onChange={(v) => setSettings((s) => ({ ...s, fromName: v }))} disabled={!isSuperAdmin} />
               </div>
+              <p className="mb-4 text-[12.5px] text-slate">
+                Sent via Brevo's API, not SMTP — the delivery provider and its API key are configured
+                at the infrastructure level, not here. These three fields control whether notifications
+                go out at all and who they appear to come from.
+              </p>
               <div className="rounded-md border border-line bg-paper p-3.5">
                 <div className="mb-2 text-[13px] font-semibold">Send Test Email</div>
                 <div className="flex gap-2">
