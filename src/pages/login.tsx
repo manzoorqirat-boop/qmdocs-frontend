@@ -199,14 +199,49 @@ export function LoginPage() {
           signature element and a literal illustration of what the product
           does. */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-ink p-10 text-white md:flex">
+        {/* Depth, built in layers rather than as a flat backdrop: an ambient
+            glow field, then concentric seal rings tilted in real 3D space.
+            All decorative, all aria-hidden, all pointer-events-none — none of
+            it sits between the reader and anything they need. Kept to the
+            existing ink/stamp/seal palette: dimensionality here comes from
+            light and perspective, not from introducing new colour. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -right-24 size-[420px] rounded-full border-[3px] border-stamp/25"
-          style={{ transform: 'rotate(-8deg)' }}
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(120% 90% at 78% 12%, color-mix(in srgb, var(--color-seal) 22%, transparent) 0%, transparent 55%),'
+              + 'radial-gradient(90% 70% at 12% 92%, color-mix(in srgb, var(--color-stamp) 14%, transparent) 0%, transparent 60%)',
+          }}
         />
+
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-16 right-4 flex size-64 -rotate-6 items-center justify-center rounded-full border-2 border-dashed border-stamp/30"
+          className="pointer-events-none absolute -top-28 -right-28"
+          style={{ perspective: '1000px' }}
+        >
+          <div
+            className="motion-safe:animate-[seal-drift_18s_ease-in-out_infinite]"
+            style={{ transform: 'rotateX(58deg) rotateZ(-12deg)', transformStyle: 'preserve-3d' }}
+          >
+            <div className="size-[420px] rounded-full border-[3px] border-stamp/25" />
+            <div
+              className="absolute inset-10 rounded-full border-2 border-dashed border-stamp/30"
+              style={{ transform: 'translateZ(38px)' }}
+            />
+            <div
+              className="absolute inset-24 rounded-full border border-seal/35"
+              style={{ transform: 'translateZ(76px)' }}
+            />
+          </div>
+        </div>
+
+        {/* A hairline of light along the panel's inner edge — the detail that
+            makes two adjacent surfaces read as genuinely separate planes
+            rather than one flat division. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent"
         />
 
         <div className="relative flex items-center gap-2 text-lg font-semibold">
