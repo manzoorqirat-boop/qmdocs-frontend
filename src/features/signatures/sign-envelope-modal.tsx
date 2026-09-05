@@ -307,9 +307,33 @@ export function SignEnvelopeModal({ envelope: envSummary, currentUser, onClose, 
                       </div>
                     )}
 
-                    <div className="flex flex-col gap-1.5">
-                      <Label>Your password *</Label>
-                      <Input type="password" autoFocus value={pwd} onChange={(e) => setPwd(e.target.value)} />
+                    {/* The e-signature credential. This is the legally
+                        operative moment in the whole product — under 21 CFR
+                        Part 11 §11.200 this password IS the signature — but it
+                        was presented as an unlabelled password box
+                        indistinguishable from a login form. Framing it as a
+                        distinct, bordered signing block makes the gravity of
+                        the action visible without adding a single extra click. */}
+                    <div className="mt-1 rounded-lg border border-seal/25 bg-seal-soft/40 p-3">
+                      <div className="mb-2 flex items-center gap-1.5 font-record text-[10.5px] font-semibold tracking-wide text-seal uppercase">
+                        <PenLine size={12} />
+                        Electronic signature
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="esign-password">Your password *</Label>
+                        <Input
+                          id="esign-password"
+                          type="password"
+                          autoFocus
+                          value={pwd}
+                          onChange={(e) => setPwd(e.target.value)}
+                        />
+                      </div>
+                      <p className="mt-2 text-[11.5px] leading-relaxed text-slate">
+                        Entering your password applies your legally binding electronic signature
+                        as <span className="font-semibold text-ink-soft">{currentUser.username}</span>,
+                        and is recorded in the audit trail.
+                      </p>
                     </div>
                     {err && !submitting && (
                       <div className="mt-2.5 rounded-md bg-danger-soft px-2.5 py-2 text-[13px] text-danger">{err}</div>
