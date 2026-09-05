@@ -155,12 +155,33 @@ export function SettingsPage() {
     import('@/lib/api').then(({ api }) =>
       api.getMasterData().then((md) => {
         if (md?.signingMeanings) setSigningMeanings((prev) => ({ ...prev, ...md.signingMeanings }));
-        if (md?.printDownloadDepartment) setPrintDept(md.printDownloadDepartment);
-        if (Array.isArray(md?.printDownloadDepartments)) setPrintDepts(md.printDownloadDepartments);
         setMasterDataLoaded(true);
       }),
     );
   }, [masterDataLoaded]);
+
+  // Parse printDownloadDepartment / printDownloadDepartments once they arrive in the
+  // settings map. Previously these were read from getMasterData() instead — which never
+  // included either field in its response — so the dropdown/list here always reset to
+  // blank on every reload, even though the underlying save itself was working correctly.
+  // Sourced from the same /api/settings response every other section on this page already
+  // uses, matching the pattern makerCheckerConfig below already gets right.
+  const [pdSourceKey, setPdSourceKey] = useState('');
+  if (settings.printDownloadDepartment !== undefined && settings.printDownloadDepartment !== pdSourceKey) {
+    setPdSourceKey(settings.printDownloadDepartment ?? '');
+    setPrintDept(settings.printDownloadDepartment ?? '');
+  }
+
+  const [pdsSourceKey, setPdsSourceKey] = useState('');
+  if (settings.printDownloadDepartments && settings.printDownloadDepartments !== pdsSourceKey) {
+    setPdsSourceKey(settings.printDownloadDepartments);
+    try {
+      const list = JSON.parse(settings.printDownloadDepartments);
+      if (Array.isArray(list)) setPrintDepts(list);
+    } catch {
+      /* keep defaults */
+    }
+  }
 
   // Parse makerCheckerConfig once it arrives in the settings map.
   const [mcSourceKey, setMcSourceKey] = useState('');
