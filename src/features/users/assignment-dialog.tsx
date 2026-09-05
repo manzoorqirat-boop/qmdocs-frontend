@@ -169,6 +169,7 @@ export function AssignmentDialog({ target, sites, departments, onClose, onSaved 
                 variant="outline"
                 size="icon"
                 className="border-danger/30 text-danger hover:bg-danger-soft"
+                aria-label="Remove this additional access entry"
                 onClick={() => setForm({ ...form, additionalAccess: form.additionalAccess.filter((_, j) => j !== i) })}
               >
                 <X size={14} />
