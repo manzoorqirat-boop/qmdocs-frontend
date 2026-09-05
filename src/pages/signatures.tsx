@@ -223,6 +223,8 @@ export function SignaturesPage() {
               </Select>
               <Input
                 className="min-w-[200px] flex-1"
+                type="search"
+                aria-label="Search documents"
                 placeholder={
                   searchField === 'title'
                     ? 'Search by title…'
