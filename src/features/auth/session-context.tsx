@@ -90,6 +90,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     clearSession();
     setActiveSiteState('');
     setUser(null);
+
+    // Clearing state alone was never enough — nothing in the router reacts to `user`
+    // becoming null, so a manual "Sign Out" click left the same protected page mounted
+    // with an empty user object (visible as a generic "User" placeholder and blank content,
+    // rather than an actual redirect to the login screen). A full reload forces the app's
+    // own initial-load auth check to run again from scratch, the same way it already
+    // correctly happens on an automatic, session-expiry-triggered logout in api.ts — this
+    // just gives a manual logout the same real reload that path already relies on.
+    if (typeof window !== 'undefined') {
+      window.__eresAllowUnload = true;
+      window.location.reload();
+    }
   }, []);
 
   const refreshSession = useCallback((data: LoginResponse) => {
