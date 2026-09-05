@@ -127,26 +127,63 @@ function RoutingNode({
 }) {
   const isActive = activeRecipient === rKey;
   return (
-    <div className="relative flex gap-2.5 pb-3 pl-1 last:pb-0">
-      <div className="absolute top-[26px] bottom-0 left-[13px] w-px bg-line last:hidden" aria-hidden="true" />
+    <div className="group/node relative flex gap-2.5 pb-3 pl-1 last:pb-0">
+      {/* The connector between nodes. Gradient rather than a flat rule so the
+          chain reads as flowing downward through the routing order, which is
+          what it actually represents. */}
+      <div
+        className="absolute top-[26px] bottom-0 left-[13px] w-px bg-gradient-to-b from-line-strong to-line last:hidden"
+        aria-hidden="true"
+      />
       <button
         onClick={() => onActivate(rKey)}
         title="Click, then drag on the document to place this recipient's box"
-        className="relative z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-        style={{ background: color, boxShadow: isActive ? `0 0 0 3px ${color}33` : undefined }}
+        className={cn(
+          'relative z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white',
+          'transition-transform duration-(--duration-fast) ease-(--ease-out-quart)',
+          'hover:scale-110 active:scale-95',
+          isActive && 'scale-110',
+        )}
+        style={{
+          background: color,
+          // Two-layer ring on the active node: a tight white gap then a
+          // colour halo, so the marker lifts off the chain instead of just
+          // changing shade. Same idea as a focus ring, used here to answer
+          // "which recipient am I placing right now?" at a glance.
+          boxShadow: isActive
+            ? `0 0 0 2px var(--color-paper-raised), 0 0 0 5px ${color}59, 0 2px 8px -2px ${color}80`
+            : `0 1px 2px 0 rgb(18 24 31 / 0.15)`,
+        }}
       >
         {placedHere && showCheck ? <Check size={13} /> : letter}
       </button>
       <div
-        className={cn('min-w-0 flex-1 rounded-md border px-2.5 py-2', isActive ? 'border-2' : 'border-line-strong border-dashed')}
+        className={cn(
+          'min-w-0 flex-1 rounded-md border px-2.5 py-2',
+          'transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-(--ease-out-quart)',
+          isActive ? 'border-2 shadow-card' : 'border-line-strong border-dashed group-hover/node:border-solid',
+        )}
         style={isActive ? { borderColor: color, background: `${color}0d` } : undefined}
       >
         <div className="mb-1 flex items-center justify-between gap-1.5">
-          <span className="text-[11px] font-bold tracking-wide uppercase" style={{ color }}>
+          <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-wide uppercase" style={{ color }}>
             {label}
+            {/* Placement confirmation as a quiet inline cue rather than only
+                swapping the marker glyph — the marker is small and easy to
+                miss while attention is on the document canvas. */}
+            {placedHere && showCheck && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-success-soft px-1.5 py-px text-[9px] font-semibold text-success">
+                <Check size={9} /> PLACED
+              </span>
+            )}
           </span>
           {onRemove && (
-            <button onClick={onRemove} title="Remove" className="text-slate hover:text-danger">
+            <button
+              onClick={onRemove}
+              title="Remove"
+              aria-label={`Remove ${label}`}
+              className="text-slate opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 group-hover/node:opacity-100"
+            >
               <X size={13} />
             </button>
           )}
@@ -162,6 +199,7 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
   const homeSiteId = currentUser?.siteId;
   const [err, setErr] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
   const createMutation = useCreateEnvelope();
   const checkDocNumbers = useCheckDocNumbers();
 
@@ -372,14 +410,41 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
               <div
                 onDrop={(e) => {
                   e.preventDefault();
+                  setDragActive(false);
                   handleFileAdd(e.dataTransfer.files);
                 }}
                 onDragOver={(e) => e.preventDefault()}
+                // dragEnter/dragLeave rather than dragOver for the state flag:
+                // dragOver fires continuously while the pointer moves, so
+                // setting state from it would re-render on every frame of the
+                // drag. The dropzone previously looked identical whether a file
+                // was hovering over it or not, which made a working drop target
+                // feel like it might not be one.
+                onDragEnter={() => setDragActive(true)}
+                onDragLeave={(e) => {
+                  // Only clear when the pointer genuinely leaves the zone, not
+                  // when it crosses onto a child element inside it.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragActive(false);
+                }}
                 onClick={() => fileInputRef.current?.click()}
-                className="m-6 flex flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-line-strong text-center"
+                className={cn(
+                  'm-6 flex flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed text-center',
+                  'transition-[border-color,background-color,transform] duration-(--duration-base) ease-(--ease-out-quart)',
+                  dragActive
+                    ? 'scale-[1.01] border-seal bg-seal-soft'
+                    : 'border-line-strong hover:border-seal/50 hover:bg-paper-raised',
+                )}
               >
-                <Paperclip size={28} className="mb-3 text-slate" />
-                <div className="mb-1 text-[15px] font-semibold text-ink">Drop PDFs here, or click to browse</div>
+                <Paperclip
+                  size={28}
+                  className={cn(
+                    'mb-3 transition-colors duration-(--duration-base)',
+                    dragActive ? 'text-seal' : 'text-slate',
+                  )}
+                />
+                <div className="mb-1 text-[15px] font-semibold text-ink">
+                  {dragActive ? 'Release to add' : 'Drop PDFs here, or click to browse'}
+                </div>
                 <div className="text-[12.5px] text-slate">Up to 10 documents · the document stays on screen the whole time you're setting this up</div>
                 <input
                   ref={fileInputRef}
