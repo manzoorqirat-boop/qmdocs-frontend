@@ -45,6 +45,18 @@ const SECTIONS: Record<string, string> = {
   printDepts: 'Print & Download Access',
   makerChecker: 'Dual Approval (Maker-Checker)',
 };
+
+// Sections whose values go through the batched /api/settings save. Excludes
+// Homepage Banner (its own upload endpoint), Signature Reminders and Job
+// Titles (their own endpoints), and Change Password — none of which write to
+// the settings map that Save All compares against.
+const SAVEABLE_SECTIONS = Object.keys(SECTIONS);
+
+// Sections backed by business master data, which is subject to maker-checker:
+// saving these stages a change request for QA approval instead of applying
+// immediately (see BusinessSettingKeys on the backend). Mirrored here only to
+// word the confirmation accurately when a batched save spans both kinds.
+const GATED_SECTIONS = ['masterData', 'qaDept', 'printDepts'];
 const SECURITY_KEYS = ['minPasswordLength', 'passwordExpiry', 'passwordHistory', 'maxFailedAttempts', 'lockoutDuration', 'sessionTimeout', 'systemVersion'];
 const EMAIL_KEYS = ['emailEnabled', 'fromEmail', 'fromName'];
 
@@ -218,6 +230,77 @@ export function SettingsPage() {
       default:
         return {};
     }
+  }
+
+  // Which saveable sections currently differ from what the server last sent.
+  //
+  // Compares each section's outgoing payload against the loaded `settings` map,
+  // so it reflects real pending changes rather than merely "this field was
+  // focused". Two things depend on it: the unsaved-changes markers in the nav,
+  // and Save All below.
+  const dirtySections = useMemo(() => {
+    const isDirty = (section: string) =>
+      Object.entries(sectionPayload(section)).some(
+        ([key, value]) => String(value ?? '') !== String(settings[key] ?? ''),
+      );
+    return SAVEABLE_SECTIONS.filter(isDirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, signingMeanings, printDept, printDepts, makerChecker]);
+
+  /**
+   * Saves every changed section in one request, under a single e-signature.
+   *
+   * The per-section Save buttons remain — this adds a path for the common case
+   * of touching several sections in one sitting, which previously meant one
+   * password prompt per section. Batching does NOT weaken the 21 CFR Part 11
+   * §11.200 requirement: the signature is still an explicit, credentialed act
+   * covering exactly the changes being submitted, and the backend audits each
+   * key individually regardless of how many arrive per request. What it removes
+   * is repeated re-authentication for one continuous intent, not the signature.
+   */
+  function openSaveAllModal() {
+    if (!isSuperAdmin || dirtySections.length === 0) return;
+    setPwError('');
+
+    const names = dirtySections.map((s) => SECTIONS[s]).join(', ');
+    const payload = Object.assign({}, ...dirtySections.map(sectionPayload));
+
+    setPwAction({
+      title: 'Confirm Settings Update',
+      message:
+        `You are saving ${dirtySections.length} section${dirtySections.length > 1 ? 's' : ''}: ${names}. `
+        + 'Re-enter your password as an electronic signature. Each changed value is recorded '
+        + 'individually in the audit trail.',
+      confirmLabel: 'Save & Sign',
+      run: async (password) => {
+        const result = await saveSettings.mutateAsync({
+          adminUsername: user!.username,
+          adminPassword: password,
+          settings: payload,
+        });
+
+        if ('pending' in result && result.pending) {
+          // A mixed batch is applied in two halves by the backend: non-gated
+          // settings take effect immediately, gated business master data is
+          // staged for QA approval. So "pending" here can mean "some of this
+          // is live and some isn't" — worth saying plainly rather than
+          // implying the whole save is waiting.
+          const gated = dirtySections.filter((s) => GATED_SECTIONS.includes(s));
+          const immediate = dirtySections.filter((s) => !GATED_SECTIONS.includes(s));
+
+          toast.info(result.message, {
+            description:
+              immediate.length > 0
+                ? `${immediate.map((s) => SECTIONS[s]).join(', ')} applied. `
+                  + `${gated.map((s) => SECTIONS[s]).join(', ')} needs QA approval first.`
+                : 'These changes have not taken effect yet — they need QA approval first.',
+          });
+          return;
+        }
+
+        toast.success(`Saved ${dirtySections.length} section${dirtySections.length > 1 ? 's' : ''}`);
+      },
+    });
   }
 
   function openSaveModal(section: string) {
@@ -414,16 +497,44 @@ export function SettingsPage() {
             key={s.key}
             onClick={() => setActiveSection(s.key)}
             className={cn(
-              'shrink-0 rounded-md px-3 py-2 text-left text-[13px] font-medium whitespace-nowrap transition-colors',
+              'flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-[13px] font-medium whitespace-nowrap transition-colors',
               activeSection === s.key ? 'bg-seal-soft text-seal' : 'text-ink-soft hover:bg-paper',
             )}
           >
-            {s.label}
+            <span>{s.label}</span>
+            {/* Unsaved-change marker. Previously nothing indicated that edits in
+                one section were still pending once you navigated to another —
+                and since edits live in shared state rather than being discarded
+                on navigation, it was easy to leave without saving them. */}
+            {dirtySections.includes(s.key) && (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-warning"
+                title="Unsaved changes"
+                aria-label="Unsaved changes"
+              />
+            )}
           </button>
         ))}
       </nav>
 
       <div className="min-w-0">
+        {/* Batched save. Appears only when there is something to save, and only
+            for the role that can save it — an always-present bar would be one
+            more permanently-occupied strip of screen for a page that is mostly
+            read, not edited. */}
+        {isSuperAdmin && dirtySections.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3">
+            <div className="text-[13px] text-ink-soft">
+              <span className="font-semibold">
+                Unsaved changes in {dirtySections.length} section{dirtySections.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-slate"> — {dirtySections.map((s) => SECTIONS[s]).join(', ')}</span>
+            </div>
+            <Button size="sm" onClick={openSaveAllModal} disabled={saveSettings.isPending}>
+              {saveSettings.isPending ? 'Saving…' : `Save all & sign`}
+            </Button>
+          </div>
+        )}
         <>
           {activeSection === 'logo' && isAdmin && (
             <>
