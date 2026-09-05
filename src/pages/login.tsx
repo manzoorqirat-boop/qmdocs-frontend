@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { ShieldCheck, User, Lock, Eye, EyeOff, ArrowRight, Loader2, Lock as LockSmall } from 'lucide-react';
+import { ShieldCheck, User, Lock, Eye, EyeOff, ArrowRight, Loader2, Info, Lock as LockSmall } from 'lucide-react';
 import { useLoginMutation, useForgotPasswordMutation, useResetPasswordMutation } from '@/features/auth/hooks';
 import { useCompanyLogo } from '@/features/company/hooks';
 import { useSession } from '@/features/auth/session-context';
-import { probeActiveUsers, saveSession } from '@/lib/session';
+import { probeActiveUsers, saveSession, takeSessionEndReason } from '@/lib/session';
 import { ApiRequestError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +60,19 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [sessionPrompt, setSessionPrompt] = useState<{ message: string } | null>(null);
+
+  // Why a previous session ended, when the user was signed out involuntarily
+  // (expiry, superseded by a newer login, forced out by an admin). Its own
+  // state rather than reusing `notice`, which is styled green for genuine
+  // successes like a completed password reset — being signed out is neutral
+  // information, not a success and not an error the user caused. Read once
+  // and cleared, so a later manual reload stays quiet.
+  const [sessionEndNotice, setSessionEndNotice] = useState('');
+
+  useEffect(() => {
+    const reason = takeSessionEndReason();
+    if (reason) setSessionEndNotice(reason);
+  }, []);
 
   // Forgot password: two-step self-service reset.
   const [mode, setMode] = useState<'login' | 'forgot'>('login');
@@ -248,6 +261,12 @@ export function LoginPage() {
             Authenticate to access electronic records, signatures, and the compliance audit trail.
           </p>
 
+          {sessionEndNotice && (
+            <div className="mb-4 flex items-start gap-2 rounded-md border border-info/30 bg-info-soft px-3 py-2.5 text-[13px] text-info">
+              <Info size={15} className="mt-px shrink-0" />
+              <span>{sessionEndNotice}</span>
+            </div>
+          )}
           {notice && (
             <div className="mb-4 rounded-md border border-success/30 bg-success-soft px-3 py-2.5 text-[13px] text-success">
               {notice}
