@@ -3,7 +3,7 @@
 // param trick (never a custom header, so requests never trigger a CORS
 // preflight), same 401/sessionInvalid distinction between "your session
 // ended" and "wrong e-signature password" (the latter must NOT log you out).
-import { getToken, getActiveSite, clearSession } from '@/lib/session';
+import { getToken, getActiveSite, clearSession, setSessionEndReason } from '@/lib/session';
 import type {
   LoginApiResponse,
   UserDirectoryEntry,
@@ -59,7 +59,10 @@ async function request<T = unknown>(
     if (d.sessionInvalid) {
       clearSession();
       if (typeof window !== 'undefined') {
-        window.alert((d.error as string) || 'Session ended');
+        // Handed to the login screen's own error banner rather than a native
+        // window.alert() — a blocking browser dialog is unstyled, out of place
+        // in the app, and holds up the reload until dismissed.
+        setSessionEndReason((d.error as string) || 'Session ended');
         window.__eresAllowUnload = true;
         window.location.reload();
       }
@@ -94,6 +97,7 @@ async function fetchBlob(path: string): Promise<Blob> {
   const res = await fetch(`${BASE_URL}${path}`, { headers });
   if (res.status === 401) {
     clearSession();
+    setSessionEndReason('Session ended');
     window.__eresAllowUnload = true;
     window.location.reload();
     throw new Error('Session ended');
