@@ -11,6 +11,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/skeleton';
 
 const PAGE_SIZE = 25;
 const IMMUTABLE_TAG = (
@@ -202,7 +203,7 @@ export function AuditLogTab() {
           </CardDescription>
         </CardHeader>
         {isLoading ? (
-          <div className="py-8 text-center text-[13px] text-slate">Loading…</div>
+          <div className="px-4 py-2"><TableSkeleton rows={8} columns={5} label="Loading audit events" /></div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
