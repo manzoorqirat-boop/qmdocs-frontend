@@ -348,6 +348,8 @@ export function UsersPage() {
             <div className="mb-3 flex flex-wrap gap-2">
               <Input
                 className="min-w-[200px] flex-1"
+                type="search"
+                aria-label="Search users"
                 placeholder="Search by name, username, email, department…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
