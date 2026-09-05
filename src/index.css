@@ -207,4 +207,20 @@
       transform: translateX(100%);
     }
   }
+
+  /* The login hero's seal rings, drifting in 3D. Deliberately very slow and
+     very small in amplitude — at 18s per cycle it reads as the page being
+     quietly alive rather than as something animating at you, and it never
+     competes with the sign-in form for attention. Applied via Tailwind's
+     motion-safe: variant, so it simply never starts for anyone who has asked
+     for reduced motion, rather than starting and being flattened. */
+  @keyframes seal-drift {
+    0%,
+    100% {
+      transform: rotateX(58deg) rotateZ(-12deg) translateY(0);
+    }
+    50% {
+      transform: rotateX(54deg) rotateZ(-9deg) translateY(-14px);
+    }
+  }
 }
