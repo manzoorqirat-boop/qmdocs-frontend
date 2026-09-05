@@ -19,13 +19,6 @@ import {
 } from '@/components/ui/dialog';
 import type { LoginResponse } from '@/types/api';
 
-const COMPLIANCE = [
-  { t: '21 CFR Part 11', d: 'FDA electronic records & signatures' },
-  { t: 'EU Annex 11', d: 'EMA computerised systems' },
-  { t: 'GAMP 5', d: 'Risk-based validation lifecycle' },
-  { t: 'ALCOA+', d: 'Data integrity by design' },
-];
-
 function isPasswordExpired(data: unknown): data is { mustChangePassword: true } & Record<string, unknown> {
   return !!data && typeof data === 'object' && 'mustChangePassword' in data;
 }
@@ -270,13 +263,89 @@ export function LoginPage() {
           )}
         </div>
 
-        <div className="relative grid grid-cols-2 gap-x-6 gap-y-3">
-          {COMPLIANCE.map((c) => (
-            <div key={c.t}>
-              <div className="font-record text-[12px] font-semibold tracking-wide text-white/90">{c.t}</div>
-              <div className="text-[11.5px] text-white/45">{c.d}</div>
-            </div>
-          ))}
+        {/* Replaces the static compliance-standards grid. An isometric bar
+            field with a signing-throughput curve over it — the shapes are
+            decorative, not real figures, so they carry no numbers and are
+            hidden from assistive tech rather than announcing invented data on
+            a pre-login screen. Built as inline SVG with a CSS 3D tilt: it
+            costs nothing to load, scales cleanly, and needs no chart library
+            on the one page a user sees before they are authenticated. */}
+        <div
+          aria-hidden="true"
+          className="relative mt-auto"
+          style={{ perspective: '900px' }}
+        >
+          <div
+            className="origin-bottom"
+            style={{ transform: 'rotateX(52deg) rotateZ(-24deg)', transformStyle: 'preserve-3d' }}
+          >
+            <svg viewBox="0 0 320 150" className="w-full max-w-[380px] overflow-visible">
+              {/* Ground grid */}
+              {Array.from({ length: 7 }).map((_, i) => (
+                <line
+                  key={`h${i}`}
+                  x1="0"
+                  y1={i * 25}
+                  x2="320"
+                  y2={i * 25}
+                  stroke="currentColor"
+                  className="text-white/10"
+                  strokeWidth="0.75"
+                />
+              ))}
+              {Array.from({ length: 9 }).map((_, i) => (
+                <line
+                  key={`v${i}`}
+                  x1={i * 40}
+                  y1="0"
+                  x2={i * 40}
+                  y2="150"
+                  stroke="currentColor"
+                  className="text-white/10"
+                  strokeWidth="0.75"
+                />
+              ))}
+
+              {/* Isometric bars, each a top face plus a side face so they read
+                  as solids rather than flat rectangles. */}
+              {[38, 62, 45, 88, 70, 105, 82, 128].map((h, i) => {
+                const x = 14 + i * 38;
+                const w = 20;
+                const y = 150 - h;
+                return (
+                  <g key={i} className="motion-safe:animate-[bar-rise_1.1s_var(--ease-out-quart)_backwards]" style={{ animationDelay: `${i * 70}ms` }}>
+                    <rect x={x} y={y} width={w} height={h} fill="var(--color-seal)" opacity="0.55" />
+                    <rect x={x} y={y} width={w} height="4" fill="var(--color-seal)" opacity="0.95" />
+                    <rect x={x + w} y={y + 3} width="5" height={h} fill="var(--color-seal)" opacity="0.3" />
+                  </g>
+                );
+              })}
+
+              {/* Throughput curve riding above the bars */}
+              <path
+                d="M24 108 L62 84 L100 96 L138 54 L176 70 L214 38 L252 52 L290 16"
+                fill="none"
+                stroke="var(--color-stamp)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="motion-safe:animate-[curve-draw_1.8s_var(--ease-out-quart)_300ms_backwards]"
+              />
+              {[[24, 108], [100, 96], [176, 70], [290, 16]].map(([cx, cy], i) => (
+                <circle key={i} cx={cx} cy={cy} r="3.5" fill="var(--color-stamp)" />
+              ))}
+            </svg>
+          </div>
+        </div>
+
+        {/* One line of substance under the graphic, rather than a wall of
+            standards names. */}
+        <div className="relative mt-8 flex items-center gap-6 font-record text-[11px] tracking-wide text-white/45 uppercase">
+          <span>Routed</span>
+          <span className="text-white/20">/</span>
+          <span>Signed</span>
+          <span className="text-white/20">/</span>
+          <span>Audited</span>
         </div>
       </div>
 
