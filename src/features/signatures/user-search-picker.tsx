@@ -105,6 +105,23 @@ export function UserSearchPicker({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Close on scroll of any ancestor. The panel is absolutely positioned
+  // against the input, so when the surrounding rail scrolls underneath it the
+  // two drift apart and the list appears to detach or get cut off. Closing is
+  // the honest behaviour here — the alternative is repositioning on every
+  // scroll frame, which is a lot of machinery for a list you are about to
+  // pick from anyway. Capture phase, because scroll does not bubble.
+  useEffect(() => {
+    if (!open) return;
+    function onScroll(e: Event) {
+      // Ignore scrolling *inside* the results list itself.
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [open]);
+
   const filtered = useMemo(() => {
     const pool = dept ? eligible.filter((u) => (u.department || '(No dept)') === dept) : eligible;
     if (!query.trim()) return pool.slice(0, 60);
@@ -244,13 +261,16 @@ export function UserSearchPicker({
 
       {open && (
         <div
-          // Escapes the narrow right rail rather than being confined to it.
-          // At a few dozen users the in-rail width was fine; at several hundred
-          // it leaves almost no room for the name/email/role/site columns that
-          // are exactly what you need to tell two similar people apart. It
-          // anchors to the input's left edge and grows rightward over the
-          // document canvas, which is inert while the picker is open.
-          className="absolute top-full right-0 left-0 z-50 mt-1 flex max-h-[420px] w-[max(100%,420px)] flex-col overflow-hidden rounded-md border-[1.5px] bg-paper-raised shadow-popover"
+          // Anchored to the input's RIGHT edge, growing leftward. Growing
+          // rightward pushed past the rail and, because the rail is
+          // overflow-y-auto, got clipped and forced a horizontal scrollbar
+          // instead of overflowing cleanly. Leftward keeps it inside the
+          // dialog while still escaping the rail's narrow column.
+          //
+          // Width is capped to the viewport so it can never exceed the dialog
+          // on a small screen, and min() means it simply matches the input's
+          // width when there is no room to grow.
+          className="absolute top-full right-0 z-50 mt-1 flex max-h-[420px] w-[min(440px,calc(100vw-4rem))] min-w-full flex-col overflow-hidden rounded-md border-[1.5px] bg-paper-raised shadow-popover"
           style={{ borderColor: accentColor }}
         >
           {homeSiteId && sites.length > 1 && (
