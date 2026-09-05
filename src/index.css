@@ -208,6 +208,28 @@
     }
   }
 
+  /* Login hero analytics. Both are entrance animations only — they play once
+     and stop, rather than looping, so the panel settles instead of moving
+     continuously behind a sign-in form. Applied via motion-safe: at the call
+     site, so they never start under reduced motion. */
+  @keyframes bar-rise {
+    from {
+      transform: scaleY(0);
+      transform-origin: bottom;
+      opacity: 0;
+    }
+  }
+  @keyframes curve-draw {
+    from {
+      stroke-dasharray: 600;
+      stroke-dashoffset: 600;
+    }
+    to {
+      stroke-dasharray: 600;
+      stroke-dashoffset: 0;
+    }
+  }
+
   /* The login hero's seal rings, drifting in 3D. Deliberately very slow and
      very small in amplitude — at 18s per cycle it reads as the page being
      quietly alive rather than as something animating at you, and it never
