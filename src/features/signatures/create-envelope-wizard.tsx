@@ -10,6 +10,8 @@ import {
   Plus,
   ArrowDown,
   Mail,
+  Maximize2,
+  Minimize2,
   User as UserIcon,
 } from 'lucide-react';
 import { useCreateEnvelope, useCheckDocNumbers } from '@/features/envelopes/hooks';
@@ -200,6 +202,7 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
   const [err, setErr] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [maximized, setMaximized] = useState(false);
   const createMutation = useCreateEnvelope();
   const checkDocNumbers = useCheckDocNumbers();
 
@@ -397,9 +400,29 @@ export function CreateEnvelopeWizard({ currentUser, users, departments, sites = 
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-6xl! flex-col gap-0 p-0">
-        <DialogHeader className="border-b border-line px-5 py-3.5">
+      <DialogContent
+        className={cn(
+          'flex flex-col gap-0 p-0 transition-[width,height,max-width] duration-(--duration-base) ease-(--ease-out-quart)',
+          // Maximised uses essentially the whole viewport. The default 6xl cap
+          // is comfortable for reading a page of a document, but the routing
+          // rail and the canvas compete for width as soon as a chain has more
+          // than a couple of recipients — and there was no way to trade the
+          // surrounding chrome for more room.
+          maximized
+            ? 'h-[98vh] max-h-[98vh] w-[99vw] max-w-none!'
+            : 'h-[92vh] max-h-[92vh] w-[96vw] max-w-6xl!',
+        )}
+      >
+        <DialogHeader className="flex-row items-center justify-between border-b border-line py-3.5 pr-14 pl-5">
           <DialogTitle>New Document</DialogTitle>
+          <button
+            onClick={() => setMaximized((m) => !m)}
+            title={maximized ? 'Restore size' : 'Maximise'}
+            aria-label={maximized ? 'Restore dialog size' : 'Maximise dialog'}
+            className="rounded-md p-1.5 text-slate transition-colors hover:bg-paper hover:text-ink"
+          >
+            {maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
