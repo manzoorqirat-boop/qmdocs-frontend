@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/skeleton';
 
 const ENTITY_ICON: Record<string, React.ReactNode> = {
   User: <UserIcon size={13} />,
@@ -91,7 +92,7 @@ export function ChangeHistoryTab() {
           </CardDescription>
         </CardHeader>
         {isLoading ? (
-          <div className="py-8 text-center text-[13px] text-slate">Loading change history…</div>
+          <div className="px-4 py-2"><TableSkeleton rows={6} columns={5} label="Loading change history" /></div>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={<FileText size={26} />}
