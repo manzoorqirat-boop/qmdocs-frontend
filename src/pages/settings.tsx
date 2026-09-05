@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { PasswordConfirmDialog, type PasswordConfirmAction } from '@/components/password-confirm-dialog';
+import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 function StatusMsg({ msg }: { msg: string }) {
@@ -485,7 +486,20 @@ export function SettingsPage() {
     }
   }
 
-  if (isLoading) return <div className="py-16 text-center text-[13px] text-slate">Loading settings…</div>;
+  if (isLoading) {
+    return (
+      <div className="mx-auto grid max-w-5xl grid-cols-1 items-start gap-5 lg:grid-cols-[220px_1fr]">
+        <div className="hidden flex-col gap-1 lg:flex">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+        <div className="rounded-lg border border-line bg-paper-raised p-5 shadow-card">
+          <CardSkeleton lines={5} label="Loading settings" />
+        </div>
+      </div>
+    );
+  }
 
   const visibleNav = SECTION_NAV.filter((s) => isAdmin || !s.adminOnly);
 
