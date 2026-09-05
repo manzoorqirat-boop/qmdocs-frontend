@@ -59,7 +59,7 @@ const SAVEABLE_SECTIONS = Object.keys(SECTIONS);
 // word the confirmation accurately when a batched save spans both kinds.
 const GATED_SECTIONS = ['masterData', 'qaDept', 'printDepts'];
 const SECURITY_KEYS = ['minPasswordLength', 'passwordExpiry', 'passwordHistory', 'maxFailedAttempts', 'lockoutDuration', 'sessionTimeout', 'systemVersion'];
-const EMAIL_KEYS = ['emailEnabled', 'fromEmail', 'fromName'];
+const EMAIL_KEYS = ['emailEnabled', 'fromEmail', 'fromName', 'emailProductName', 'emailFooterText'];
 
 // Sectioned nav instead of one long scroll of 9+ stacked cards — the
 // standard pattern for an admin settings page with this many distinct
@@ -660,11 +660,29 @@ export function SettingsPage() {
                 <Field label="Email Notifications (Yes/No)" placeholder="Yes" value={settings.emailEnabled ?? ''} onChange={(v) => setSettings((s) => ({ ...s, emailEnabled: v }))} disabled={!isSuperAdmin} />
                 <Field label="From Email Address" type="email" value={settings.fromEmail ?? ''} onChange={(v) => setSettings((s) => ({ ...s, fromEmail: v }))} disabled={!isSuperAdmin} />
                 <Field label="From Name" placeholder="QMDocs" value={settings.fromName ?? ''} onChange={(v) => setSettings((s) => ({ ...s, fromName: v }))} disabled={!isSuperAdmin} />
+                <Field
+                  label="Product Name (in email text)"
+                  placeholder="QMDocs"
+                  value={settings.emailProductName ?? ''}
+                  onChange={(v) => setSettings((s) => ({ ...s, emailProductName: v }))}
+                  disabled={!isSuperAdmin}
+                />
+              </div>
+              <div className="mb-4 flex flex-col gap-1.5">
+                <Label htmlFor="email-footer">Email Footer Text</Label>
+                <Input
+                  id="email-footer"
+                  placeholder="This is an automated message. Please do not reply."
+                  value={settings.emailFooterText ?? ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, emailFooterText: e.target.value }))}
+                  disabled={!isSuperAdmin}
+                />
               </div>
               <p className="mb-4 text-[12.5px] text-slate">
                 Sent via Brevo's API, not SMTP — the delivery provider and its API key are configured
-                at the infrastructure level, not here. These three fields control whether notifications
-                go out at all and who they appear to come from.
+                at the infrastructure level, not here. <span className="font-medium text-ink-soft">From Name</span> is
+                who the email appears to come from; <span className="font-medium text-ink-soft">Product Name</span> is
+                what the message text calls this system ("A document requires your attention in …").
               </p>
               <div className="rounded-md border border-line bg-paper p-3.5">
                 <div className="mb-2 text-[13px] font-semibold">Send Test Email</div>
