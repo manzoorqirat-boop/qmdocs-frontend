@@ -100,8 +100,17 @@
   --radius-xl: 1rem;
 
   --shadow-card: 0 1px 2px 0 rgb(18 24 31 / 0.04), 0 1px 3px 0 rgb(18 24 31 / 0.06);
+  --shadow-card-hover: 0 2px 4px -1px rgb(18 24 31 / 0.06), 0 8px 16px -6px rgb(18 24 31 / 0.10);
   --shadow-popover: 0 4px 6px -1px rgb(18 24 31 / 0.08), 0 10px 24px -6px rgb(18 24 31 / 0.12);
   --shadow-modal: 0 20px 60px -12px rgb(18 24 31 / 0.35);
+
+  /* Motion. Durations short enough to feel instant rather than animated —
+     this is a working tool used all day, and motion that reads as "designed"
+     the first time reads as "slow" the fiftieth. The standard easing is a
+     gentle decelerate: quick to start, settling at the end. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
 }
 
 @layer base {
@@ -166,5 +175,36 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
     transform: rotate(-2deg);
+  }
+
+  /* Skeleton placeholder for loading content. A shaped, shimmering block
+     rather than centred "Loading…" text: it holds the layout steady so
+     content does not jump into place when it arrives, and it communicates
+     roughly how much is coming. The shimmer is a slow, low-contrast sweep —
+     the reduced-motion rule in @layer base already flattens it for anyone
+     who has asked for that. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-line) 55%, transparent);
+    border-radius: var(--radius-sm);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-paper-raised) 70%, transparent),
+      transparent
+    );
+    animation: skeleton-sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes skeleton-sweep {
+    100% {
+      transform: translateX(100%);
+    }
   }
 }
