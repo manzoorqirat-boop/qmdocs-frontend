@@ -11,6 +11,41 @@ const USER_KEY = 'eres_user';
 const ACTIVE_SITE_KEY = 'eres_active_site';
 const ACTIVE_SITE_LABEL_KEY = 'eres_active_site_label';
 
+// Why the session ended, handed to the login screen to display after the
+// reload that follows an involuntary sign-out (expiry, superseded by a newer
+// login, forced out by an admin). Deliberately NOT cleared by clearSession —
+// it is written immediately before that reload and must survive it; the login
+// screen clears it once it has been shown.
+const END_REASON_KEY = 'eres_session_end_reason';
+
+/**
+ * Records why a session ended, for the login screen to show after reload.
+ *
+ * This exists because api.ts is a plain module, not a React component — it
+ * cannot render a dialog, which is why it previously reached for a native
+ * window.alert(). A blocking browser alert is jarring, unstyled, and stops
+ * the reload until the user dismisses it; handing the reason to the login
+ * screen shows the same information in the app's own error banner instead.
+ */
+export function setSessionEndReason(reason: string): void {
+  try {
+    sessionStorage.setItem(END_REASON_KEY, reason);
+  } catch {
+    /* storage unavailable — the redirect still happens, just without the reason */
+  }
+}
+
+/** Reads and clears the reason, so it shows exactly once. */
+export function takeSessionEndReason(): string {
+  try {
+    const reason = sessionStorage.getItem(END_REASON_KEY);
+    if (reason) sessionStorage.removeItem(END_REASON_KEY);
+    return reason || '';
+  } catch {
+    return '';
+  }
+}
+
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
