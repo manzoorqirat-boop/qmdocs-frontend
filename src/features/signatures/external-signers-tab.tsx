@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { TableSkeleton } from '@/components/ui/skeleton';
 import { ApiRequestError } from '@/lib/api';
 import type { EnvelopeSummary, EnvelopeDetail, ExternalSignerRow, ExternalTokenStatus } from '@/types/api';
 
@@ -133,7 +134,7 @@ export function ExternalSignersTab({ envelope, onChanged }: ExternalSignersTabPr
       </div>
 
       {isLoading ? (
-        <div className="py-6 text-center text-[13px] text-slate">Loading…</div>
+        <div className="py-2"><TableSkeleton rows={4} columns={4} label="Loading external signers" /></div>
       ) : !rows || rows.length === 0 ? (
         <div className="py-6 text-center text-[13px] text-slate">No external signers on this document.</div>
       ) : (
