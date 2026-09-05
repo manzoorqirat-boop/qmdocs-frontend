@@ -205,7 +205,7 @@ export function DashboardPage() {
           <button
             key={s.key}
             onClick={() => goSignatures(s.filter)}
-            className="group rounded-lg border border-line bg-paper-raised p-4 text-left transition-colors hover:border-line-strong"
+            className="group rounded-lg border border-line bg-paper-raised p-4 text-left shadow-card transition-[border-color,box-shadow,transform] duration-(--duration-base) ease-(--ease-out-quart) hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card-hover active:translate-y-0"
           >
             <div className="flex items-start justify-between">
               <div className={`flex size-9 items-center justify-center rounded-md ${s.accentSoft} ${s.accent}`}>{s.icon}</div>
